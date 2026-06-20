@@ -1,0 +1,52 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Streamlit
+.streamlit/
+streamlit_config.toml
+
+# Logs & temp
+*.log
+*.tmp
+temp/
+*.bak
+
+# Large data files (use cloud storage or separate archive)
+data/
+Solar Low Energy X-ray Spectrometer/data/
+High Energy L1 Orbiting X-ray Spectrometer/data/
+
+# Keep these output files (they're small and important)
+!output/
+!output/*.csv
+!output/*.md
+!output/*.joblib
+!output/*.pkl
