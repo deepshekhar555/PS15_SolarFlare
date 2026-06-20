@@ -35,7 +35,7 @@ ISRO's Aditya-L1 mission provides high-cadence X-ray measurements perfect for ma
 
 **1. Real-Time Flare Detection** — We combine data from two Aditya-L1 instruments: SoLEXS and HEL1OS. Using rolling-window threshold detection, we identified **108 validated solar flare events** in just six days. We cross-checked against NOAA's official flare list — 73 of our events matched, confirming detection accuracy.
 
-**2. Forecasting Model** — This is the key innovation. We built a RandomForest classifier that predicts flare occurrence in the next 30 minutes. It analyzes five simple, interpretable features: mean flux, variability, peak counts, recent trend, and slope. The model achieves a **0.894 ROC-AUC score** — meaning it genuinely learns flare-precursor patterns, not just random noise.
+**2. Forecasting Model** — This is the key innovation. We built a RandomForest classifier that predicts flare occurrence in the next 30 minutes. It analyzes five simple, interpretable features: mean flux, variability, peak counts, recent trend, and slope. On a random-stratified split the model reports **ROC-AUC 0.894** (informal); however, the leakage-free time-based holdout — the defensible evaluation — yields **ROC-AUC ~0.533**. We report the time-based result as the honest Phase‑1 metric and recommend expanding the training archive.
 
 **3. Live Dashboard** — Here's what an operator sees in real-time. Current alert level, flare probability, historical flux trends, and prediction confidence. No need to understand machine learning — just look at the alert: green, yellow, or red."
 
@@ -47,9 +47,9 @@ ISRO's Aditya-L1 mission provides high-cadence X-ray measurements perfect for ma
 
 *[This is your strongest number — emphasize it]*
 
-"**We achieved 16.51-minute average lead time for flare forecasting.**
+"**Lead-time summary**: On a random-stratified split the model gives **16.51 minutes** average lead time (informal). The leakage-free, time-based holdout — which prevents temporal leakage — reports **~4.57 minutes** average lead time on the current 6-day dataset. The time-based result is the honest, defensible number to present. If we ingest multi-month archives, we expect the leakage-free lead time to increase substantially.
 
-What does that mean? Space weather operators get an alert **17 minutes before a solar flare reaches its peak.** That's enough time to:
+What does a leakage-free lead time of ~4.6 minutes mean operationally? It provides a short but actionable warning window for some protective measures; with more training data this will improve to multi-minute alerts with higher confidence."
 - Reorient satellites to minimize radiation exposure
 - Shut down sensitive instruments as a precaution
 - Alert airlines of potential communication disruptions
@@ -142,16 +142,16 @@ We're confident this system is operationally relevant, technically sound, and re
 ```
 [Detection]          [Forecasting]         [Dashboard]
 108 events           RandomForest          Real-time alerts
-SoLEXS + HEL1OS     0.894 ROC-AUC        Live visualization
-Rolling windows      16.51-min lead time   Operator-ready
+SoLEXS + HEL1OS     ROC-AUC: 0.894 (random) / 0.533 (time-based)
+Rolling windows      Lead time: 16.51 min (random) / ~4.57 min (time-based)
 ```
 
 ### Slide 4: Key Result (Large Text, Prominent)
 ```
-🎯 16.51-MINUTE AVERAGE LEAD TIME
+🎯 Lead-time (summary)
 
-Operators receive alerts ~17 minutes
-BEFORE solar flare peaks
+Random-split: 16.51 minutes (inflated by leakage)
+Time-based (honest): ~4.57 minutes — recommended Phase‑1 metric
 ```
 
 ### Slide 5: Data Summary (Table)
@@ -166,7 +166,7 @@ BEFORE solar flare peaks
 ### Slide 6: Model Performance (4-column)
 ```
 Accuracy: 98.5%    |  Precision: 50%
-Recall: 25.6%      |  ROC-AUC: 0.894 ✓
+Recall: 25.6%      |  ROC-AUC: 0.894 (random) / 0.533 (time-based)
 ```
 *Subtitle: "Small sample (16 events) → modest precision/recall; strong ROC-AUC confirms genuine pattern learning"*
 
@@ -190,8 +190,8 @@ Phase 4 (Future)      → Multi-instrument ensemble; 60+ min lead time
 ### Slide 10: Closing
 ```
 📊 108 Validated Events
-⏱️  16.51-Minute Lead Time
-📈 0.894 ROC-AUC Discrimination
+⏱️  Lead time (time-based): ~4.57 minutes (Phase‑1 honest metric)
+📈 ROC-AUC (time-based): ~0.533 (leakage-free)
 🚀 Dashboard Live & Ready
 
 GitHub: [Your repo link]

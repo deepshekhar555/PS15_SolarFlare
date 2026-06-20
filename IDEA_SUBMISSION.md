@@ -13,7 +13,10 @@
 2. **Machine-learning forecaster** (RandomForest classifier) predicting flare occurrence 30 minutes ahead
 3. **Interactive dashboard** providing operators with live alerts and probabilistic risk assessment
 
-**Key Achievement**: **16.51-minute average lead time** on validation data — meaning operators receive actionable alerts ~17 minutes before flare peak, enabling protective mitigation (satellite reorientation, instrument shutdown, etc.).
+**Key Achievement**: Demonstrated end-to-end pipeline with a reproducible lead-time estimate.
+
+- **Random-split evaluation (informal)**: 16.51-minute average lead time; ROC-AUC 0.894. This evaluation used a random stratified split and is susceptible to temporal leakage from overlapping windows.
+- **Leakage-free, time-based holdout (recommended, honest)**: ROC-AUC ~0.533 and average lead time ~4.57 minutes on the current 6-day dataset. We report the time-based results as the defensible Phase‑1 metric and recommend acquiring multi-month Aditya‑L1 archives to improve these numbers.
 
 ---
 
@@ -129,8 +132,10 @@ Our sliding-window feature extraction (mean, std, max, last value, slope over 10
 | Precision | 50.0% | Of positive predictions, 50% are correct flares |
 | Recall | 25.6% | Model catches ~1 in 4 actual flares |
 | F1-Score | 33.8% | Harmonic mean of precision/recall |
-| **ROC-AUC** | **0.894** | **Strong discrimination**: model genuinely distinguishes flare-precursor patterns from background |
-| **Average Lead Time (TP)** | **16.51 minutes** | **ISRO criterion met**: alerts trigger ~17 min before peak |
+| **ROC-AUC (random split)** | **0.894** | Random-stratified split — inflated by temporal leakage |
+| **Average Lead Time (random split, TP)** | **16.51 minutes** | Derived from random-stratified split (overlapping windows) |
+| **ROC-AUC (time-based holdout)** | **0.533** | Leakage-free, honest evaluation on held-out future data |
+| **Average Lead Time (time-based, TP)** | **4.57 minutes** | Leakage-free average lead time — recommended reporting metric |
 
 ### Why Precision/Recall Are Modest
 

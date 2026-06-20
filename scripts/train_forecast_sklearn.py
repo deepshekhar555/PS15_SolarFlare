@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""Train a RandomForest with class_weight='balanced' using the existing window/label pipeline."""
+"""Train a RandomForest with class_weight='balanced' using the existing window/label pipeline.
+
+Notes:
+- This script uses a time-based holdout to avoid temporal leakage when evaluating
+    forecasting performance. A random stratified split previously reported ROC-AUC
+    ~0.894 and average lead time ~16.51 min, but that result is inflated by overlapping
+    windows appearing in both train and test sets.
+- The leakage-free, time-based holdout on the current 6-day dataset yields ROC-AUC
+    ~0.533 and average lead time ~4.57 min. These are the honest, defensible metrics
+    to report for Phase 1. To improve performance, ingest multi-month Aditya-L1
+    archives (PRADAN) and retrain with a larger positive sample set.
+"""
 import argparse
 from pathlib import Path
 import pandas as pd
