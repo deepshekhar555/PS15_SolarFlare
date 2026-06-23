@@ -17,14 +17,18 @@ import matplotlib.pyplot as plt
 import joblib
 from pathlib import Path
 from datetime import datetime, timedelta
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 
 st.set_page_config(page_title="Solar Flare Forecaster", layout="wide")
 
 ROOT = Path(__file__).resolve().parent
 SOLEXS_CSV = ROOT / 'Solar Low Energy X-ray Spectrometer' / 'output' / 'solexs_combined.csv'
 HELO_CSV = ROOT / 'High Energy L1 Orbiting X-ray Spectrometer' / 'output' / 'hel1os_combined.csv'
-MODEL_PATH = ROOT / 'output' / 'forecast_model_rf.joblib'
-RESULTS_CSV = ROOT / 'output' / 'forecast_results_rf.csv'
+
+MODEL_PATH_SINGLE = ROOT / 'output' / 'forecast_model_rf.joblib'
+RESULTS_CSV_SINGLE = ROOT / 'output' / 'forecast_results_rf.csv'
+MODEL_PATH_FUSION = ROOT / 'output' / 'forecast_model_rf_fusion.joblib'
+RESULTS_CSV_FUSION = ROOT / 'output' / 'forecast_results_rf_fusion.csv'
 
 
 @st.cache_data
@@ -52,18 +56,20 @@ def load_flux_data():
 
 
 @st.cache_data
-def load_model():
+def load_model(is_fusion=False):
     """Load trained RandomForest model."""
-    if MODEL_PATH.exists():
-        return joblib.load(MODEL_PATH)
+    path = MODEL_PATH_FUSION if is_fusion else MODEL_PATH_SINGLE
+    if path.exists():
+        return joblib.load(path)
     return None
 
 
 @st.cache_data
-def load_predictions():
+def load_predictions(is_fusion=False):
     """Load pre-computed predictions."""
-    if RESULTS_CSV.exists():
-        df = pd.read_csv(RESULTS_CSV)
+    path = RESULTS_CSV_FUSION if is_fusion else RESULTS_CSV_SINGLE
+    if path.exists():
+        df = pd.read_csv(path)
         return df
     return None
 
@@ -104,8 +110,12 @@ st.markdown("**Real-time X-ray flux monitoring and flare probability estimation*
 
 # Load data
 flux_data = load_flux_data()
-model = load_model()
-predictions = load_predictions()
+is_fusion = (data_source == "Both (Merged)")
+model = load_model(is_fusion=is_fusion)
+predictions = load_predictions(is_fusion=is_fusion)
+
+if data_source == "HEL1OS Only":
+    st.sidebar.warning("⚠️ HEL1OS-only model is not trained separately. Showing predictions from SoLEXS-trained model as a fallback.")
 
 if not flux_data:
     st.error("❌ No flux data found. Run data ingestion scripts first.")
@@ -252,26 +262,69 @@ st.subheader("📈 Model Performance Summary")
 perf_col1, perf_col2 = st.columns(2)
 
 with perf_col1:
-    st.write("""
-    **Forecasting Model (RandomForest)**
-    - **Type**: RandomForest Classifier with balanced class weights
-    - **Estimators**: 200
-    - **Features**: Mean, Std, Max, Last, Slope
-    - **Training Horizon**: 30 minutes ahead
-    - **Window**: 10 minutes
-    """)
+    if is_fusion:
+        st.write("""
+        **Forecasting Model (Dual-Instrument Fusion)**
+        - **Type**: RandomForest Classifier with balanced class weights
+        - **Estimators**: 200
+        - **Features**: SoLEXS & HEL1OS flux statistics, Z-scores, and **Spectral Hardness Ratio**
+        - **Training Horizon**: 30 minutes ahead
+        - **Window**: 10 minutes
+        - **Validation Split**: Leakage-free, chronological holdout (Recommended)
+        """)
+    else:
+        st.write("""
+        **Forecasting Model (Single-Instrument: SoLEXS)**
+        - **Type**: RandomForest Classifier with balanced class weights
+        - **Estimators**: 200
+        - **Features**: SoLEXS flux statistics (Mean, Std, Max, Last, Slope)
+        - **Training Horizon**: 30 minutes ahead
+        - **Window**: 10 minutes
+        - **Validation Split**: Leakage-free, chronological holdout (Recommended)
+        """)
 
 with perf_col2:
-    metrics_text = """
-    **Performance Metrics** (Test Set)
-    - Accuracy: 98.5%
-    - Precision: 50.0%
-    - Recall: 25.6%
-    - F1-Score: 33.8%
-    - ROC-AUC: **0.894** ✓
-    - **Avg Lead Time: 16.51 minutes**
-    """
-    st.write(metrics_text)
+    if predictions is not None and len(predictions) > 0 and 'y_true' in predictions.columns:
+        y_true = predictions['y_true']
+        y_pred = predictions['y_pred']
+        y_proba = predictions['y_proba']
+        
+        acc = accuracy_score(y_true, y_pred)
+        prec = precision_score(y_true, y_pred, zero_division=0)
+        rec = recall_score(y_true, y_pred, zero_division=0)
+        f1 = f1_score(y_true, y_pred, zero_division=0)
+        
+        try:
+            auc = roc_auc_score(y_true, y_proba)
+        except Exception:
+            auc = 0.5
+            
+        # Lead time calculation
+        tp_mask = (y_true == 1) & (y_pred == 1)
+        if tp_mask.any() and 'lead_s' in predictions.columns:
+            avg_lead = np.nanmean(predictions.loc[tp_mask, 'lead_s']) / 60.0
+        else:
+            avg_lead = float('nan')
+            
+        lead_time_str = f"{avg_lead:.2f} minutes" if not np.isnan(avg_lead) else "N/A (No True Positives)"
+        
+        # Display validation metrics dynamically
+        st.markdown(f"""
+        **Dynamic Performance Metrics** (Test Set)
+        - Accuracy: **{acc:.1%}**
+        - Precision: **{prec:.1%}** (1 in {1/prec:.1f} predictions is a true flare)
+        - Recall: **{rec:.1%}** (catches {rec:.1%} of actual flares)
+        - F1-Score: **{f1:.3f}**
+        - ROC-AUC: **{auc:.3f}**
+        - **Average Lead Time: {lead_time_str}**
+        """)
+        
+        if is_fusion:
+            st.info("💡 Note: Dual-Instrument Fusion utilizes HEL1OS and SoLEXS alignment to extract Spectral Hardness Ratio features, reducing false alarm uncertainty.")
+        else:
+            st.info("💡 Note: Single-Instrument model trained on soft X-ray (SoLEXS) counts alone.")
+    else:
+        st.warning("⚠️ Prediction metrics could not be computed. Please ensure the corresponding model is trained.")
 
 # ============================================================================
 # DATA STATISTICS TABLE

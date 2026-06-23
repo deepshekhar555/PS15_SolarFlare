@@ -16,23 +16,24 @@
 - **Real flare events detected**: 16
 - **Test/train split**: 80/20 with stratification
 
-### Performance Metrics
-| Metric | Value |
-|--------|-------|
-| Accuracy | 0.985 |
-| Precision | 0.500 |
-| Recall | 0.256 |
-| F1-Score | 0.338 |
-| ROC-AUC | 0.894 |
+### Performance Metrics (Time-Based Holdout — Leakage-Free)
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Accuracy | 0.955 | Misleading — class imbalance (120 pos vs 2708 neg in test) |
+| Precision | 0.125 | 1 in 8 positive predictions is a real flare |
+| Recall | 0.008 | Model catches ~1% of flares on time-based test |
+| F1-Score | 0.016 | Low due to extreme imbalance and small sample |
+| ROC-AUC | **0.533** | Near-random — honest leakage-free result |
 
 ### Lead Time (ISRO Evaluation Criterion)
-- **Average lead time for true positives**: 16.51 minutes
-- **Interpretation**: Model alerts ~16.5 minutes before flare peak, on average
+- **Average lead time for true positives**: **4.57 minutes** (time-based, honest)
+- **Interpretation**: With only 16 training events in a 6-day window, the model has insufficient positive examples to learn reliable precursor patterns
 
 ### Model Assessment
-- **ROC-AUC of 0.894** indicates strong discrimination between flare-precursor patterns and normal background.
-- **Modest precision/recall** due to small dataset (16 real flares); this is expected, not a failure.
-- **Highly reportable result**: 16+ minute lead time directly addresses ISRO's lead-time criterion.
+- **This is a Phase 1 proof-of-concept prototype only.** With 16 flare events, no ML model can achieve meaningful precision/recall.
+- The ROC-AUC of 0.533 (barely above random) is the *correct expected result* for this sample size.
+- A historical random-stratified split previously reported ROC-AUC ~0.894 and Precision 50%, but that evaluation had temporal leakage from overlapping windows and is not a valid performance estimate.
+- **To improve**: Ingest multi-month Aditya-L1 archives (100–150+ flare events) and retrain.
 
 ### Files
 - Model: `output/forecast_model_rf.joblib` (joblib format)

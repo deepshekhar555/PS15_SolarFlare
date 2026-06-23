@@ -132,7 +132,7 @@ streamlit run dashboard.py
 - `IDEA_SUBMISSION.md` — ISRO submission document
 
 ## Team
-[Your names here]
+SolarSentinels (Deep, Mahalaxmi, Ashfaque)
 ```
 
 ---

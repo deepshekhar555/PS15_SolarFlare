@@ -26,7 +26,10 @@ print(f'\nNowcast detection: {len(solexs_nowcast)} events')
 print(f'  Parameters: sigma=2.1, min_samples=3, window=600s')
 print(f'  Duration: {solexs_nowcast["DURATION_s"].min():.1f}s to {solexs_nowcast["DURATION_s"].max():.1f}s')
 print(f'  Peak counts: {solexs_nowcast["PEAK_COUNTS"].min():.1f} to {solexs_nowcast["PEAK_COUNTS"].max():.1f}')
-print(f'  Classes: {solexs_nowcast["MAJORITY_CLASS"].value_counts().to_dict()}')
+if 'MAJORITY_CLASS' in solexs_nowcast.columns:
+    print(f'  Classes: {solexs_nowcast["MAJORITY_CLASS"].value_counts().to_dict()}')
+else:
+    print('  Classes: Not classified')
 
 # ===== HELOS PIPELINE =====
 print('\n[2] HEL1OS COMPONENT')
@@ -44,7 +47,10 @@ print(f'\nNowcast detection: {len(helos_nowcast)} events')
 print(f'  Parameters: sigma=0.2, min_samples=3, window=600s')
 print(f'  Duration: {helos_nowcast["DURATION_s"].min():.1f}s to {helos_nowcast["DURATION_s"].max():.1f}s')
 print(f'  Peak counts: {helos_nowcast["PEAK_COUNTS"].min():.1f} to {helos_nowcast["PEAK_COUNTS"].max():.1f}')
-print(f'  Classes: {helos_nowcast["MAJORITY_CLASS"].value_counts().to_dict()}')
+if 'MAJORITY_CLASS' in helos_nowcast.columns:
+    print(f'  Classes: {helos_nowcast["MAJORITY_CLASS"].value_counts().to_dict()}')
+else:
+    print('  Classes: Not classified')
 
 # ===== COMBINED CATALOG =====
 print('\n[3] COMBINED CATALOG (OUTCOME #1)')
@@ -82,18 +88,18 @@ for f in files:
     fpath = Path('d:/PS15_SolarFlare') / f
     if fpath.exists():
         size_mb = fpath.stat().st_size / 1024 / 1024
-        print(f'  ✅ {f} ({size_mb:.1f} MB)')
+        print(f'  [OK] {f} ({size_mb:.1f} MB)')
     else:
-        print(f'  ❌ {f} (missing)')
+        print(f'  [MISSING] {f}')
 
 print('\n' + '='*70)
 print('OUTCOME #1 STATUS: PRODUCTION-READY')
 print('='*70)
 print('\nKey achievements:')
-print('  • SoLEXS pipeline: 847K points → 92 events (tuned sigma=2.1)')
-print('  • HEL1OS pipeline: 810K points → 31 events (tuned sigma=0.2)')
-print('  • Combined catalog: 108 unique events across both instruments')
-print('  • Validation: 92 SoLEXS events vs 73 NOAA reference (126% detection rate)')
-print('  • All durations realistic (≥2s for SoLEXS, ≥0.1s for HEL1OS)')
+print('  - SoLEXS pipeline: 847K points -> 92 events (tuned sigma=2.1)')
+print('  - HEL1OS pipeline: 810K points -> 31 events (tuned sigma=0.2)')
+print('  - Combined catalog: 108 unique events across both instruments')
+print('  - Validation: 92 SoLEXS events vs 73 NOAA reference (126% detection rate)')
+print('  - All durations realistic (>=2s for SoLEXS, >=0.1s for HEL1OS)')
 print('\nNext step: Build forecasting model using these catalogs (Outcome #2)')
 print('='*70)

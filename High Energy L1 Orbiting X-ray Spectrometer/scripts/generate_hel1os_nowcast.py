@@ -33,8 +33,9 @@ window_samples = int(WINDOW_SECONDS / median_cadence)
 print(f'Window: {WINDOW_SECONDS}s = ~{window_samples} samples')
 
 print('\nCalculating rolling statistics...')
-df['ROLL_MED'] = df['COUNTS'].rolling(window=window_samples, center=True, min_periods=1).median()
-df['ROLL_STD'] = df['COUNTS'].rolling(window=window_samples, center=True, min_periods=1).std()
+# Use a causal, past-only baseline so the threshold is not contaminated by future flare data.
+df['ROLL_MED'] = df['COUNTS'].shift(1).rolling(window=window_samples, min_periods=60).median()
+df['ROLL_STD'] = df['COUNTS'].shift(1).rolling(window=window_samples, min_periods=60).std()
 df['THRESH'] = df['ROLL_MED'] + SIGMA * df['ROLL_STD']
 df['THRESH'] = df['THRESH'].fillna(df['ROLL_MED'])
 
@@ -87,12 +88,12 @@ for start, end in segments:
     })
 
 events_df = pd.DataFrame(events)
-print(f'\n✅ Detected {len(events_df)} events (after min_samples={MIN_SAMPLES} filter)')
+print(f'\n[OK] Detected {len(events_df)} events (after min_samples={MIN_SAMPLES} filter)')
 
 if len(events_df) > 0:
     print(f'Duration range: {events_df["DURATION_s"].min():.1f}s to {events_df["DURATION_s"].max():.1f}s')
     print(f'Peak counts range: {events_df["PEAK_COUNTS"].min():.1f} to {events_df["PEAK_COUNTS"].max():.1f}')
 
 events_df.to_csv(OUTPUT_CSV, index=False)
-print(f'\n✅ Saved to: {OUTPUT_CSV}')
+print(f'\n[OK] Saved to: {OUTPUT_CSV}')
 print(f'Parameters: window={WINDOW_SECONDS}s, sigma={SIGMA}, min_samples={MIN_SAMPLES}')

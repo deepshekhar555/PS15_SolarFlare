@@ -44,10 +44,10 @@ for idx, zip_path in enumerate(zip_files):
                     df['DATE'] = date_str
                     all_data.append(df)
 
-        print(f"✅ Done {idx+1}/{len(zip_files)}: {os.path.basename(zip_path)}")
+        print(f"[OK] Done {idx+1}/{len(zip_files)}: {os.path.basename(zip_path)}")
 
     except Exception as e:
-        print(f"❌ Error in {zip_path}: {e}")
+        print(f"[ERROR] Error in {zip_path}: {e}")
 
 print("\nCombining all data...")
 final_df = pd.concat(all_data, ignore_index=True)
@@ -57,7 +57,7 @@ print(f"Total data points: {len(final_df)}")
 print(f"Date range: {final_df['DATE'].min()} to {final_df['DATE'].max()}")
 
 final_df.to_csv(OUTPUT_CSV, index=False)
-print(f"\n✅ Saved to: {OUTPUT_CSV}")
+print(f"\n[OK] Saved to: {OUTPUT_CSV}")
 
 shutil.rmtree(TEMP_FOLDER)
-print("✅ Temp files cleaned up!")
+print("[OK] Temp files cleaned up!")

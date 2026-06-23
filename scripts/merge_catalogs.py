@@ -122,5 +122,5 @@ output_cols = [c for c in output_cols if c in merged_df.columns]
 merged_df = merged_df[output_cols].sort_values('PEAK_TIME').reset_index(drop=True)
 
 merged_df.to_csv(MERGED_OUTPUT, index=False)
-print(f'\n✅ Saved combined catalog to: {MERGED_OUTPUT}')
+print(f'\n[OK] Saved combined catalog to: {MERGED_OUTPUT}')
 print(f'   {len(merged_df)} events total')

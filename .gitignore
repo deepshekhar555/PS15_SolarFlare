@@ -43,6 +43,7 @@ temp/
 data/
 Solar Low Energy X-ray Spectrometer/data/
 High Energy L1 Orbiting X-ray Spectrometer/data/
+backup_verified_20260619/
 
 # Keep these output files (they're small and important)
 !output/

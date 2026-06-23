@@ -22,7 +22,7 @@ if (Test-Path pradan_urls.txt) {
         bash pradan_bulk_download.sh
     }
 } else {
-    Write-Host "No pradan_urls.txt found — skipping download." -ForegroundColor Yellow
+    Write-Host "No pradan_urls.txt found - skipping download." -ForegroundColor Yellow
 }
 
 Write-Host "Combining SoLEXS zips..."
@@ -34,7 +34,10 @@ python "Solar Low Energy X-ray Spectrometer/scripts/generate_solexs_nowcast.py"
 Write-Host "Labeling SoLEXS with external catalogs..."
 python "Solar Low Energy X-ray Spectrometer/scripts/label_flares.py"
 
-Write-Host "Training leakage-free forecaster..."
+Write-Host "Training leakage-free forecaster (Single Instrument)..."
 python scripts/train_forecast_sklearn.py
+
+Write-Host "Training leakage-free forecaster (Dual-Instrument Fusion)..."
+python scripts/train_forecast_dual_fusion.py
 
 Write-Host "Pipeline finished. Check output/ for artifacts." -ForegroundColor Green

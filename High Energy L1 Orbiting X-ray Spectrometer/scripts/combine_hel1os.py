@@ -139,3 +139,11 @@ else:
 if TEMP_FOLDER.exists():
     shutil.rmtree(TEMP_FOLDER)
     print('✅ Temp files cleaned up!')
+
+
+
+
+
+
+
+

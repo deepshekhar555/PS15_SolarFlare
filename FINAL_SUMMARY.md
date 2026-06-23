@@ -10,20 +10,19 @@
 ## 📊 What You Have Right Now
 
 ### Outcome #1: Nowcasting Detector ✅
-- **108 validated flare events** combined from SoLEXS + HEL1OS
-- **SoLEXS**: 92 events detected, 73 validated vs NOAA (79.3% precision)
-- **HEL1OS**: 31 events detected, cadence-aware tuning (sigma=0.2)
+- **1,141 combined catalog events** from SoLEXS + HEL1OS (merged at 120s gap)
+- **SoLEXS vs NOAA validation**: **68/73 GOES-listed flares detected (93.2% recall)**; 5 missed are C-class sub-threshold events; 92 detected events total (24 are sub-GOES-threshold candidates)
+- **HEL1OS**: cadence-aware tuning (sigma=0.2)
 - **Output**: `output/solexs_hel1os_combined_catalog.csv`
 
-### Outcome #2: Forecasting Model ✅
+### Outcome #2: Forecasting Model ✅ (Experimental — Phase 1 Proof of Concept)
 - **RandomForest classifier** with balanced class weights
-- **Training data**: 14,139 windows, 16 confirmed flare events
-- **Validation metrics**:
-  - ROC-AUC: **0.894** (strong discrimination)
-  - Precision: 50.0% (1 in 2 predictions is correct)
-  - Recall: 25.6% (catches ~1 in 4 flares)
-  - F1-Score: 33.8%
-- **Average Lead Time**: **16.51 minutes** ← KEY ISRO METRIC
+- **Training data**: 14,139 windows, 16 confirmed flare events (6-day window only)
+- **Validation metrics** (random stratified split — has temporal leakage):
+  - ROC-AUC: **0.894** | Precision: 50.0% | Recall: 25.6% | F1: 33.8%
+  - Average Lead Time: **16.51 minutes** (from leaky split — optimistic)
+- **Leakage-free (time-based holdout)**: ROC-AUC ~0.533 | Lead time ~4.57 min
+- ⚠️ With only 16 positive events, all metrics have high uncertainty; multi-month archive needed
 - **Output**: `output/forecast_model_rf.joblib` + `output/forecast_results_rf.csv`
 
 ### Outcome #3: Interactive Dashboard ✅

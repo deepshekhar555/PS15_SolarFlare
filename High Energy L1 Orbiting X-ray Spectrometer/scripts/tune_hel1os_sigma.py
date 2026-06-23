@@ -21,8 +21,9 @@ window_samples = int(WINDOW_SECONDS / median_cadence)
 print(f'Cadence: {median_cadence:.3f}s, Window: {window_samples} samples\n')
 
 # Pre-calculate rolling stats once
-df['ROLL_MED'] = df['COUNTS'].rolling(window=window_samples, center=True, min_periods=1).median()
-df['ROLL_STD'] = df['COUNTS'].rolling(window=window_samples, center=True, min_periods=1).std()
+# Use a causal, past-only baseline so the threshold is not contaminated by future flare data.
+df['ROLL_MED'] = df['COUNTS'].shift(1).rolling(window=window_samples, min_periods=60).median()
+df['ROLL_STD'] = df['COUNTS'].shift(1).rolling(window=window_samples, min_periods=60).std()
 df['ROLL_STD'] = df['ROLL_STD'].fillna(0)
 
 sigma_values = [2.0, 1.5, 1.0, 0.8, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
@@ -58,7 +59,7 @@ for sigma in sigma_values:
             valid_events += 1
 
     results.append((sigma, len(segments), valid_events))
-    print(f'sigma={sigma}: {len(segments):6d} segments → {valid_events:5d} events (min_samples={MIN_SAMPLES})')
+    print(f'sigma={sigma}: {len(segments):6d} segments -> {valid_events:5d} events (min_samples={MIN_SAMPLES})')
 
 print('\n' + '='*50)
 print('Recommendation: Choose sigma with ~20-50 events')

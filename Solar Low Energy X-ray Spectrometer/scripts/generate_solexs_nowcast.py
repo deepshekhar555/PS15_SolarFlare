@@ -13,8 +13,9 @@ def detect_nowcasts(combined_csv: Path, out_csv: Path, min_samples: int = 3, win
     df['COUNTS'] = pd.to_numeric(df['COUNTS'], errors='coerce')
 
     roll_win = window_seconds  # data is ~1 Hz so window_seconds ~ window samples
-    df['ROLL_MED'] = df['COUNTS'].rolling(window=roll_win, min_periods=60, center=True).median()
-    df['ROLL_STD'] = df['COUNTS'].rolling(window=roll_win, min_periods=60, center=True).std()
+    # Use a causal, past-only baseline so the threshold is not contaminated by future flare data.
+    df['ROLL_MED'] = df['COUNTS'].shift(1).rolling(window=roll_win, min_periods=60).median()
+    df['ROLL_STD'] = df['COUNTS'].shift(1).rolling(window=roll_win, min_periods=60).std()
     df['THRESH'] = df['ROLL_MED'] + sigma * df['ROLL_STD']
 
     # Detection mask: counts strictly greater than threshold
