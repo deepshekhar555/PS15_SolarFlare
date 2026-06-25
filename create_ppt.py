@@ -251,10 +251,77 @@ def create_presentation():
         p.font.color.rgb = TEXT_DARK
         p.space_after = Pt(10)
 
-    # Slide 5: Results and Validation
-    slide5 = add_standard_slide("Results and Validation")
+    # Slide 5: Real-Time Telemetry & Event Detection Visuals
+    slide5_new = add_standard_slide("Real-Time Telemetry & Event Detection Visuals")
     
-    t_box5 = slide5.shapes.add_textbox(Inches(0.75), Inches(1.8), Inches(5.6), Inches(4.8))
+    # Text introduction
+    intro_box = slide5_new.shapes.add_textbox(Inches(0.75), Inches(1.5), Inches(11.83), Inches(0.8))
+    tf_intro = intro_box.text_frame
+    tf_intro.word_wrap = True
+    p_intro = tf_intro.paragraphs[0]
+    p_intro.text = "High-cadence X-ray telemetry from Aditya-L1's SoLEXS instrument analyzed by our causal nowcasting pipeline. The plots below illustrate the raw count rates, dynamic thresholding, and identified solar flare events."
+    p_intro.font.name = 'Arial'
+    p_intro.font.size = Pt(14)
+    p_intro.font.color.rgb = TEXT_DARK
+    
+    # Left Image: Telemetry & Threshold Zoom
+    img1_path = "Solar Low Energy X-ray Spectrometer/output/solexs_plot_zoom.png"
+    if os.path.exists(img1_path):
+        slide5_new.shapes.add_picture(img1_path, Inches(0.75), Inches(2.2), width=Inches(5.6), height=Inches(3.8))
+        # Caption
+        cap1_box = slide5_new.shapes.add_textbox(Inches(0.75), Inches(6.1), Inches(5.6), Inches(0.8))
+        tf_cap1 = cap1_box.text_frame
+        tf_cap1.word_wrap = True
+        p_cap1 = tf_cap1.paragraphs[0]
+        p_cap1.text = "Figure 1: SoLEXS soft X-ray telemetry zoom showing the rolling median baseline and the dynamic nowcasting threshold."
+        p_cap1.font.name = 'Arial'
+        p_cap1.font.size = Pt(11)
+        p_cap1.font.italic = True
+        p_cap1.font.color.rgb = TEXT_DARK
+        p_cap1.alignment = PP_ALIGN.CENTER
+    else:
+        # Fallback box
+        fallback = slide5_new.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.75), Inches(2.2), Inches(5.6), Inches(3.8))
+        fallback.fill.solid()
+        fallback.fill.fore_color.rgb = WHITE
+        fallback.line.color.rgb = BLUE_DARK
+        tf_fb = fallback.text_frame
+        tf_fb.word_wrap = True
+        p_fb = tf_fb.paragraphs[0]
+        p_fb.text = "[Telemetry Plot Zoom Image]"
+        p_fb.alignment = PP_ALIGN.CENTER
+        
+    # Right Image: Zoomed Flare Event
+    img2_path = "Solar Low Energy X-ray Spectrometer/output/solexs_event_zoom.png"
+    if os.path.exists(img2_path):
+        slide5_new.shapes.add_picture(img2_path, Inches(6.98), Inches(2.2), width=Inches(5.6), height=Inches(3.8))
+        # Caption
+        cap2_box = slide5_new.shapes.add_textbox(Inches(6.98), Inches(6.1), Inches(5.6), Inches(0.8))
+        tf_cap2 = cap2_box.text_frame
+        tf_cap2.word_wrap = True
+        p_cap2 = tf_cap2.paragraphs[0]
+        p_cap2.text = "Figure 2: Zoomed-in view of a detected solar flare event, showing precise onset, peak, and decay phases."
+        p_cap2.font.name = 'Arial'
+        p_cap2.font.size = Pt(11)
+        p_cap2.font.italic = True
+        p_cap2.font.color.rgb = TEXT_DARK
+        p_cap2.alignment = PP_ALIGN.CENTER
+    else:
+        # Fallback box
+        fallback2 = slide5_new.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(6.98), Inches(2.2), Inches(5.6), Inches(3.8))
+        fallback2.fill.solid()
+        fallback2.fill.fore_color.rgb = WHITE
+        fallback2.line.color.rgb = GREEN
+        tf_fb2 = fallback2.text_frame
+        tf_fb2.word_wrap = True
+        p_fb2 = tf_fb2.paragraphs[0]
+        p_fb2.text = "[Zoomed Flare Event Image]"
+        p_fb2.alignment = PP_ALIGN.CENTER
+
+    # Slide 6: Results and Validation
+    slide6_results = add_standard_slide("Results and Validation")
+    
+    t_box5 = slide6_results.shapes.add_textbox(Inches(0.75), Inches(1.8), Inches(5.6), Inches(4.8))
     tf5 = t_box5.text_frame
     tf5.word_wrap = True
     
@@ -281,7 +348,7 @@ def create_presentation():
         
     rows, cols = 6, 3
     left, top, width, height = Inches(6.8), Inches(1.8), Inches(5.8), Inches(4.5)
-    table_shape = slide5.shapes.add_table(rows, cols, left, top, width, height)
+    table_shape = slide6_results.shapes.add_table(rows, cols, left, top, width, height)
     table = table_shape.table
     
     table.columns[0].width = Inches(2.2)
@@ -317,6 +384,63 @@ def create_presentation():
             p.font.size = Pt(11)
             p.font.color.rgb = TEXT_DARK
             p.alignment = PP_ALIGN.CENTER
+
+    # Slide 7: Case Study: Microflare Discovery
+    slide_micro = add_standard_slide("Case Study: Microflare Discovery")
+    
+    # Left Column: Scientific context
+    left_box_m = slide_micro.shapes.add_textbox(Inches(0.75), Inches(1.8), Inches(5.6), Inches(4.8))
+    tf_lm = left_box_m.text_frame
+    tf_lm.word_wrap = True
+    
+    p_lmh = tf_lm.paragraphs[0]
+    p_lmh.text = "Discovering Sub-Threshold Events"
+    p_lmh.font.name = 'Arial'
+    p_lmh.font.size = Pt(22)
+    p_lmh.font.bold = True
+    p_lmh.font.color.rgb = BLUE_DARK
+    p_lmh.space_after = Pt(14)
+    
+    bullets_lm = [
+        "Superior Instrument Sensitivity: Aditya-L1 SoLEXS captures faint solar activity due to its low-energy threshold and high spectral resolution.",
+        "The June 10 Event: On June 10, 2026, at 23:46 UTC, our causal nowcasting algorithm flagged a highly structured, 679-second duration event.",
+        "GOES Catalog Gap: This event is completely absent from the official NOAA GOES flare catalog, confirming its status as a newly discovered microflare.",
+        "Scientific Importance: Microflares are critical to solving the coronal heating problem, and their real-time detection validates our dynamic baseline approach."
+    ]
+    for b in bullets_lm:
+        p = tf_lm.add_paragraph()
+        p.text = "• " + b
+        p.font.name = 'Arial'
+        p.font.size = Pt(14)
+        p.font.color.rgb = TEXT_DARK
+        p.space_after = Pt(12)
+        
+    # Right Column: The Microflare Plot
+    img_m_path = "Solar Low Energy X-ray Spectrometer/output/solexs_20260610_2346_event.png"
+    if os.path.exists(img_m_path):
+        slide_micro.shapes.add_picture(img_m_path, Inches(6.98), Inches(1.8), width=Inches(5.6), height=Inches(4.2))
+        # Caption
+        cap_m_box = slide_micro.shapes.add_textbox(Inches(6.98), Inches(6.1), Inches(5.6), Inches(0.8))
+        tf_cap_m = cap_m_box.text_frame
+        tf_cap_m.word_wrap = True
+        p_cap_m = tf_cap_m.paragraphs[0]
+        p_cap_m.text = "Figure 3: Microflare event detected by SoLEXS at 23:46 UTC on June 10, 2026 (679s duration, peak ~6,800 cps, absent from GOES)."
+        p_cap_m.font.name = 'Arial'
+        p_cap_m.font.size = Pt(11)
+        p_cap_m.font.italic = True
+        p_cap_m.font.color.rgb = TEXT_DARK
+        p_cap_m.alignment = PP_ALIGN.CENTER
+    else:
+        # Fallback box
+        fallback_m = slide_micro.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(6.98), Inches(1.8), Inches(5.6), Inches(4.2))
+        fallback_m.fill.solid()
+        fallback_m.fill.fore_color.rgb = WHITE
+        fallback_m.line.color.rgb = GREEN
+        tf_fb_m = fallback_m.text_frame
+        tf_fb_m.word_wrap = True
+        p_fb_m = tf_fb_m.paragraphs[0]
+        p_fb_m.text = "[Microflare Event Plot]"
+        p_fb_m.alignment = PP_ALIGN.CENTER
 
     # Slide 6: Innovation and Merit
     slide6 = add_standard_slide("Innovation and Technical Merit")
