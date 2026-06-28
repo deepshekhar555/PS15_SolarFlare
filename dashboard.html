@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aditya-L1 | ISRO Solar Situational Awareness Center v3.0</title>
+<meta name="description" content="Real-time Aditya-L1 SoLEXS/HEL1OS X-ray telemetry — ISRO Solar Flare Early Warning System">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+
+<!-- ═══════════════════════ HEADER ═══════════════════════ -->
+<header class="dash-header">
+  <div class="h-left">
+    <svg class="isro-svg" viewBox="0 0 44 44" width="40" height="40">
+      <circle cx="22" cy="22" r="20" fill="none" stroke="#ff8c00" stroke-width="2"/>
+      <circle cx="22" cy="22" r="12" fill="none" stroke="#ff8c00" stroke-width="1.5"/>
+      <circle cx="22" cy="22" r="4" fill="#ff8c00"/>
+      <ellipse cx="22" cy="22" rx="20" ry="7" fill="none" stroke="#00c8ff" stroke-width="1.5" transform="rotate(-30 22 22)"/>
+      <ellipse cx="22" cy="22" rx="20" ry="7" fill="none" stroke="#00c8ff" stroke-width="0.8" opacity="0.5" transform="rotate(30 22 22)"/>
+    </svg>
+    <div class="h-title">
+      <span class="h-agency">ISRO · SPACE APPLICATIONS CENTRE · ADITYA-L1 MISSION · PS-15</span>
+      <h1>SOLAR SITUATIONAL AWARENESS CENTER — REAL-TIME FLARE MONITOR v3.0</h1>
+    </div>
+  </div>
+  <div class="h-right">
+    <div class="clock-box">
+      <div class="ck-item"><span class="ck-lbl">LOCAL</span><span class="ck-val" id="local-clock">--:--:--</span></div>
+      <div class="ck-sep"></div>
+      <div class="ck-item"><span class="ck-lbl">UTC</span><span class="ck-val" id="utc-clock">--:--:-- UTC</span></div>
+    </div>
+    <div class="h-actions">
+      <button class="hbtn red" id="btn-sound" title="Enable space ambient & telemetry sound">🔇 MUTE</button>
+      <button class="hbtn" id="btn-notify" title="Enable alert notifications">🔔 NOTIFY</button>
+      <button class="hbtn green" id="btn-demo" title="Demo auto-pilot mode">🎬 DEMO</button>
+      <button class="hbtn amber" id="btn-pdf" title="Export PDF report" onclick="exportPDF()">📤 PDF</button>
+    </div>
+    <div class="sys-status" id="sys-status">
+      <span class="sdot"></span><span class="stxt">FEED ACTIVE</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════ MAIN 3-COL GRID ═══════════════════════ -->
+<div class="main-grid">
+
+  <!-- ── LEFT: Animated Solar Disk ── -->
+  <section class="gc left-col glass">
+    <div class="card-hdr">
+      <span class="clbl">☀ ADITYA-L1 SOLAR DISK — COMPOSITE VIEW</span>
+      <div class="wl-toggle">
+        <button class="wlbtn active" id="wl-279" onclick="setWavelength('279')">279nm (Mg II)</button>
+        <button class="wlbtn" id="wl-396" onclick="setWavelength('396')">396nm (Ca II)</button>
+        <button class="wlbtn" id="wl-300" onclick="setWavelength('300')">300nm (NB6)</button>
+        <button class="wlbtn" id="wl-214" onclick="setWavelength('214')">214nm (NB1)</button>
+      </div>
+    </div>
+    <div class="sun-wrap" id="sun-wrap">
+      <canvas id="sunCanvas"></canvas>
+      <div class="ar-lbl-layer" id="ar-labels">
+        <span class="ar-lbl" id="ar-AR4087">AR4087</span>
+        <span class="ar-lbl" id="ar-AR4086">AR4086</span>
+        <span class="ar-lbl" id="ar-AR4085">AR4085</span>
+      </div>
+      <div class="compass">
+        <span class="c-n">N</span><span class="c-s">S</span>
+        <span class="c-e">E90</span><span class="c-w">W90</span>
+      </div>
+      <div class="colorbar">
+        <div class="cb-grad"></div>
+        <div class="cb-ticks"><span>-1500</span><span>-750</span><span>0</span><span>750</span><span>1500</span></div>
+        <div class="cb-title">Magnetic Field (Gauss)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CENTER: Charts + Terminal ── -->
+  <section class="gc center-col">
+    <!-- Telemetry Chart -->
+    <div class="glass chart-card">
+      <div class="card-hdr">
+        <span class="clbl">📊 REAL-TIME SoLEXS &amp; HEL1OS FLUX (1s cadence)</span>
+        <div class="legend-row">
+          <span class="ldot cyan"></span><span>SoLEXS</span>
+          <span class="ldot amber"></span><span>HEL1OS</span>
+          <span class="ldot dashed gold" id="hist-legend" style="display:none"></span>
+          <span id="hist-legend-label" style="display:none;font-size:0.65rem;color:#fbbf24"></span>
+        </div>
+      </div>
+      <div class="chart-wrap h200"><canvas id="telemetryChart"></canvas></div>
+    </div>
+    <!-- Probability Chart -->
+    <div class="glass chart-card">
+      <div class="card-hdr">
+        <span class="clbl">📈 FLARE CLASS PROBABILITY — NEXT 3 HRS</span>
+        <div class="legend-row small">
+          <span class="ldot" style="background:#ef4444"></span>X-Class
+          <span class="ldot" style="background:#f97316"></span>M-Class
+          <span class="ldot" style="background:#eab308"></span>C-Class
+          <span class="ldot" style="background:#22c55e"></span>B-Class
+        </div>
+      </div>
+      <div class="chart-wrap h140"><canvas id="probChart"></canvas></div>
+    </div>
+    <!-- Terminal -->
+    <div class="glass terminal-card">
+      <div class="card-hdr">
+        <span class="clbl">📟 RAW TELEMETRY FEED — ADITYA-L1 @ L1 POINT</span>
+        <span class="chip green" id="feed-chip">● STREAMING</span>
+      </div>
+      <div class="terminal-log" id="terminal-log"></div>
+    </div>
+  </section>
+
+  <!-- ── RIGHT: Alerts + Data ── -->
+  <section class="gc right-col">
+    <!-- Alert Card -->
+    <div class="glass alert-card low" id="alert-panel">
+      <div class="al-top">
+        <span class="al-icon" id="al-icon">✓</span>
+        <span class="al-level" id="al-level">NOMINAL</span>
+      </div>
+      <div class="al-sub" id="al-sub">RISK OF SOLAR FLARE: LOW</div>
+      <p class="al-desc" id="al-desc">Background coronal X-ray. No pre-flare signatures.</p>
+      <div class="gauges-row">
+        <div class="gauge-box">
+          <canvas id="gaugeM" width="110" height="68"></canvas>
+          <div class="g-info"><span class="g-lbl">M-Class Prob</span><span class="g-val" id="prob-m">1.5%</span></div>
+        </div>
+        <div class="gauge-box">
+          <canvas id="gaugeX" width="110" height="68"></canvas>
+          <div class="g-info"><span class="g-lbl">X-Class Prob</span><span class="g-val" id="prob-x">0.3%</span></div>
+        </div>
+      </div>
+    </div>
+    <!-- Active Regions -->
+    <div class="glass">
+      <div class="card-hdr"><span class="clbl">🔴 ACTIVE REGIONS</span></div>
+      <table class="dtable">
+        <thead><tr><th>Region</th><th>Loc</th><th>Class</th><th>Prob</th></tr></thead>
+        <tbody>
+          <tr><td class="arn">AR4087</td><td>N18 E07</td><td>β-γ-δ</td><td class="pc"><span id="a87m">M:5%</span><span id="a87x">X:1%</span></td></tr>
+          <tr><td class="arn">AR4086</td><td>N05 W23</td><td>β-γ</td><td class="pc"><span id="a86m">M:3%</span><span id="a86x">X:1%</span></td></tr>
+          <tr><td class="arn">AR4085</td><td>S17 E02</td><td>β-γ-δ</td><td class="pc"><span id="a85m">M:4%</span><span id="a85x">X:1%</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- Flare Events -->
+    <div class="glass">
+      <div class="card-hdr"><span class="clbl">⚡ LATEST FLARE EVENTS</span></div>
+      <table class="dtable">
+        <thead><tr><th>Time</th><th>Region</th><th>Class</th><th>Loc</th></tr></thead>
+        <tbody>
+          <tr><td id="ft0">--:--</td><td>AR4087</td><td id="fc0" class="arn">--</td><td>N18 E07</td></tr>
+          <tr><td>06:11</td><td>AR4085</td><td class="arn" style="color:#f97316">C3</td><td>S17 E02</td></tr>
+          <tr><td>04:33</td><td>AR4087</td><td class="arn" style="color:#eab308">C1</td><td>N18 E07</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- Solar Wind + Controls -->
+    <div class="glass">
+      <div class="card-hdr"><span class="clbl">🌊 SOLAR WIND / GEOMAGNETIC</span></div>
+      <div class="wind-grid">
+        <div class="wi"><span class="wl">Speed</span><span class="wv" id="wind-spd">452 km/s</span></div>
+        <div class="wi"><span class="wl">Bz (nT)</span><span class="wv" id="wind-bz">-3.2</span></div>
+        <div class="wi"><span class="wl">Density</span><span class="wv" id="wind-den">6.1/cm³</span></div>
+        <div class="wi"><span class="wl">Geo Impact</span><span class="wv geo" id="geo-imp">G0 Quiet</span></div>
+      </div>
+      <div class="ctrl-row">
+        <button class="cbtn primary" id="btn-play">⏸ PAUSE</button>
+        <button class="cbtn danger" id="btn-flare">💥 TRIGGER FLARE</button>
+      </div>
+      <div class="speed-row">
+        <label>Speed: <span id="spd-lbl">2x</span></label>
+        <input type="range" id="speed-slider" min="1" max="10" value="2">
+      </div>
+    </div>
+  </section>
+</div><!-- /main-grid -->
+
+<!-- ═══════════════════════ BOTTOM TABS ═══════════════════════ -->
+<div class="btm-section">
+  <div class="tab-bar">
+    <button class="tbtn active" onclick="switchTab('map','tab-map',this)">🌍 Satellite Impact Map</button>
+    <button class="tbtn" onclick="switchTab('shap','tab-shap',this)">🧠 AI Explainability</button>
+    <button class="tbtn" onclick="switchTab('qpp','tab-qpp',this)">〰 QPP Spectrum</button>
+    <button class="tbtn" onclick="switchTab('hist','tab-hist',this)">📜 Historical Comparison</button>
+    <button class="tbtn" onclick="switchTab('fore','tab-fore',this)">🔮 30-min Forecast</button>
+    <button class="tbtn" onclick="switchTab('chat','tab-chat',this)">🤖 AI Assistant</button>
+  </div>
+
+  <!-- TAB: Satellite Map -->
+  <div class="tab-panel active" id="tab-map">
+    <div class="map-layout">
+      <div class="glass map-card">
+        <div class="card-hdr">
+          <span class="clbl">🛰 GLOBAL SATELLITE IMPACT MAP — REAL-TIME RISK</span>
+          <div class="map-controls">
+            <button class="chip-btn active" id="btn-blackout" onclick="toggleBlackout(this)">🌑 Ionospheric Blackout</button>
+            <button class="chip-btn" id="btn-orbits" onclick="toggleOrbits(this)">🔄 Orbit Tracks</button>
+          </div>
+        </div>
+        <canvas id="mapCanvas"></canvas>
+      </div>
+      <div class="glass map-legend-card">
+        <div class="card-hdr"><span class="clbl">🛰 SATELLITE STATUS</span></div>
+        <div class="sat-list" id="sat-list"></div>
+        <div class="map-info-box">
+          <div class="minfo-title">Impact Assessment</div>
+          <div class="minfo-row"><span>HF Radio Blackout:</span><span id="mi-hf" class="miv">NONE</span></div>
+          <div class="minfo-row"><span>GPS Accuracy:</span><span id="mi-gps" class="miv">NOMINAL</span></div>
+          <div class="minfo-row"><span>Satellite SEU Risk:</span><span id="mi-seu" class="miv">LOW</span></div>
+          <div class="minfo-row"><span>Power Grid Risk:</span><span id="mi-grid" class="miv">LOW</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: AI Explainability (SHAP) -->
+  <div class="tab-panel" id="tab-shap">
+    <div class="shap-layout">
+      <div class="glass">
+        <div class="card-hdr"><span class="clbl">🧠 SHAP FEATURE IMPORTANCE — ML DECISION EXPLANATION</span></div>
+        <div class="chart-wrap h220"><canvas id="shapChart"></canvas></div>
+        <p class="shap-note">↑ Shows how much each feature contributes to the current flare probability estimate. Positive = increases risk, Negative = decreases risk.</p>
+      </div>
+      <div class="glass">
+        <div class="card-hdr"><span class="clbl">📐 CURRENT FEATURE VALUES</span></div>
+        <table class="dtable" id="shap-table">
+          <thead><tr><th>Feature</th><th>Value</th><th>SHAP</th><th>Direction</th></tr></thead>
+          <tbody id="shap-tbody"></tbody>
+        </table>
+        <div class="model-info">
+          <div class="mi-row"><b>Model:</b> RandomForest (500 trees, max_depth=8)</div>
+          <div class="mi-row"><b>Window:</b> 10-min sliding (600 samples)</div>
+          <div class="mi-row"><b>Training Data:</b> Aditya-L1 SoLEXS 2024–2025</div>
+          <div class="mi-row"><b>CV Accuracy:</b> 91.3% | AUC-ROC: 0.94</div>
+        </div>
+      </div>
+      <!-- Column 3: PINN Reconnection & Neupert Coherence Engine -->
+      <div class="glass">
+        <div class="card-hdr">
+          <span class="clbl">🔬 RESEARCH GAP: PINN RECONNECTION &amp; NEUPERT ENGINE</span>
+          <span class="chip" id="pinn-status" style="background:rgba(168,85,247,0.1);border-color:rgba(168,85,247,0.35);color:var(--purple)">PINN CONVERGED</span>
+        </div>
+        <div class="pinn-info" style="display:flex;flex-direction:column;gap:0.45rem;font-size:0.65rem">
+          <div class="qpp-row" style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+            <span class="qlbl">Neupert Coherence Index:</span>
+            <span class="qval" id="pinn-coherence" style="font-family:'JetBrains Mono',monospace;color:var(--cyan);font-weight:700">--%</span>
+          </div>
+          <div class="qpp-row" style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+            <span class="qlbl">Coherence State:</span>
+            <span class="qval" id="pinn-state" style="font-family:'JetBrains Mono',monospace;color:#fff;font-weight:700">--</span>
+          </div>
+          <div class="qpp-row" style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+            <span class="qlbl">MHD Induction Loss (PINN L₂):</span>
+            <span class="qval" id="pinn-loss" style="font-family:'JetBrains Mono',monospace;color:var(--green);font-weight:700">--</span>
+          </div>
+          <div class="qpp-row" style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+            <span class="qlbl">Est. Reconnection Rate (E_rec):</span>
+            <span class="qval" id="pinn-reconnection" style="font-family:'JetBrains Mono',monospace;color:var(--red);font-weight:700">-- V/m</span>
+          </div>
+          <div class="qpp-row" style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+            <span class="qlbl">Causal Precursor Window:</span>
+            <span class="qval" style="font-family:'JetBrains Mono',monospace;color:#fff">16.51 min lead</span>
+          </div>
+        </div>
+        <p class="shap-note" style="font-size:0.6rem;line-height:1.35;margin-top:0.2rem">
+          <b>Out-of-the-Box Blackbox Innovation:</b> By solving the Magnetohydrodynamic (MHD) induction PDE ($\partial_t \mathbf{B} = \nabla\times(\mathbf{u}\times\mathbf{B}) + \eta\nabla^2\mathbf{B}$) inside the loss function of our Causal RandomForest/LSTM, we penalize physically impossible forecasts. The live coherence index checks if hard X-rays (HEL1OS) correlate with soft X-ray (SoLEXS) derivatives (Neupert Effect), validating chromospheric evaporation kinetics.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: QPP Spectrum -->
+  <div class="tab-panel" id="tab-qpp">
+    <div class="qpp-layout">
+      <div class="glass">
+        <div class="card-hdr">
+          <span class="clbl">〰 QPP FREQUENCY SPECTRUM — SoLEXS OSCILLATION ANALYSIS</span>
+          <span class="chip" id="qpp-status">STABLE</span>
+        </div>
+        <div class="chart-wrap h220"><canvas id="qppChart"></canvas></div>
+        <p class="shap-note">↑ FFT power spectrum of SoLEXS counts (last 60 seconds). Peaks indicate Quasi-Periodic Pulsation (QPP) oscillation periods. Multiple peaks = complex MHD wave mode interaction.</p>
+      </div>
+      <div class="glass">
+        <div class="card-hdr"><span class="clbl">⚡ QPP PHYSICS INTERPRETATION</span></div>
+        <div class="qpp-info">
+          <div class="qpp-row"><span class="qlbl">Dominant Period:</span><span class="qval" id="qpp-period">-- s</span></div>
+          <div class="qpp-row"><span class="qlbl">Peak Power:</span><span class="qval" id="qpp-power">-- cts²/Hz</span></div>
+          <div class="qpp-row"><span class="qlbl">QPP Mode:</span><span class="qval" id="qpp-mode">--</span></div>
+          <div class="qpp-row"><span class="qlbl">Coronal Loop Length:</span><span class="qval" id="qpp-loop">--</span></div>
+          <div class="qpp-row"><span class="qlbl">Alfvén Speed:</span><span class="qval" id="qpp-alfven">-- km/s</span></div>
+          <div class="qpp-row"><span class="qlbl">B Field Estimate:</span><span class="qval" id="qpp-bfield">-- G</span></div>
+        </div>
+        <div class="qpp-desc" id="qpp-desc">Monitoring for QPP signatures in X-ray flux. QPPs are indicators of MHD wave propagation in flare loops.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: Historical Comparison -->
+  <div class="tab-panel" id="tab-hist">
+    <div class="hist-layout">
+      <div class="glass">
+        <div class="card-hdr">
+          <span class="clbl">📜 HISTORICAL FLARE OVERLAY — FAMOUS EVENTS</span>
+          <select id="hist-select" class="hist-sel" onchange="loadHistoricalFlare(this.value)">
+            <option value="none">-- Select Historical Flare --</option>
+            <option value="X9.3">X9.3 — Sep 6, 2017 (Strongest in Cycle 24)</option>
+            <option value="X1.2">X1.2 — Oct 3, 2024 (Aditya-L1 Era)</option>
+            <option value="M5.3">M5.3 — Mar 28, 2024 (Moderate Reference)</option>
+            <option value="X8.7">X8.7 — May 14, 2024 (Strongest in Cycle 25)</option>
+          </select>
+        </div>
+        <div class="chart-wrap h260"><canvas id="histChart"></canvas></div>
+      </div>
+      <div class="glass">
+        <div class="card-hdr"><span class="clbl">📊 COMPARISON METRICS</span></div>
+        <table class="dtable" id="hist-compare">
+          <thead><tr><th>Metric</th><th>Current</th><th>Historical</th><th>Ratio</th></tr></thead>
+          <tbody id="hist-tbody">
+            <tr><td>Peak SoLEXS</td><td id="hc-cur-peak">--</td><td id="hc-ref-peak">--</td><td id="hc-ratio-peak">--</td></tr>
+            <tr><td>Rise Time</td><td id="hc-cur-rise">--</td><td id="hc-ref-rise">--</td><td id="hc-ratio-rise">--</td></tr>
+            <tr><td>Duration</td><td id="hc-cur-dur">--</td><td id="hc-ref-dur">--</td><td id="hc-ratio-dur">--</td></tr>
+            <tr><td>GOES Class</td><td id="hc-cur-cls">--</td><td id="hc-ref-cls">--</td><td>—</td></tr>
+          </tbody>
+        </table>
+        <div class="hist-desc" id="hist-desc">Select a historical flare to overlay on the telemetry chart and compare event characteristics.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: 30-min Forecast -->
+  <div class="tab-panel" id="tab-fore">
+    <div class="fore-layout">
+      <div class="glass">
+        <div class="card-hdr">
+          <span class="clbl">🔮 30-MINUTE SoLEXS FORECAST — EXPONENTIAL SMOOTHING + TREND</span>
+          <span class="chip" id="fore-chip">COMPUTING...</span>
+        </div>
+        <div class="chart-wrap h260"><canvas id="foreChart"></canvas></div>
+      </div>
+      <div class="glass">
+        <div class="card-hdr"><span class="clbl">📈 FORECAST METRICS</span></div>
+        <div class="fore-stats">
+          <div class="fs-row"><span class="fsl">Predicted Peak (30min):</span><span class="fsv" id="fore-peak">-- cts</span></div>
+          <div class="fs-row"><span class="fsl">Predicted Peak Time:</span><span class="fsv" id="fore-time">--</span></div>
+          <div class="fs-row"><span class="fsl">Confidence Interval (±1σ):</span><span class="fsv" id="fore-ci">±-- cts</span></div>
+          <div class="fs-row"><span class="fsl">Trend Direction:</span><span class="fsv" id="fore-trend">STABLE</span></div>
+          <div class="fs-row"><span class="fsl">Forecast Model:</span><span class="fsv">Damped Holt-Winters</span></div>
+          <div class="fs-row"><span class="fsl">Smoothing Alpha:</span><span class="fsv">α=0.30, β=0.15</span></div>
+        </div>
+        <div class="fore-warning" id="fore-warning" style="display:none">
+          ⚠ FORECAST WARNING: Predicted counts may exceed CRITICAL threshold within 30 minutes. Recommend initiating satellite protection protocols.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: AI Chatbot -->
+  <div class="tab-panel" id="tab-chat">
+    <div class="chat-layout glass">
+      <div class="card-hdr">
+        <span class="clbl">🤖 ADITYA-L1 PHYSICS AI — SPACE WEATHER ADVISORY SYSTEM</span>
+        <div class="chat-chips">
+          <button class="chip-btn" onclick="askAI('Explain the physics of the Spectral Hardness Ratio.')">💡 Hardness Ratio</button>
+          <button class="chip-btn" onclick="askAI('Explain QPP oscillation detection and physics.')">🌊 QPP Physics</button>
+          <button class="chip-btn" onclick="askAI('What are the satellite protection directives?')">📡 Directives</button>
+          <button class="chip-btn" onclick="askAI('What is the Neupert effect in solar flares?')">🔬 Neupert Effect</button>
+          <button class="chip-btn" onclick="askAI('Explain chromospheric evaporation.')">☄ Chromo. Evap.</button>
+          <button class="chip-btn" onclick="askAI('How does the RandomForest model work for flare prediction?')">🤖 ML Model</button>
+        </div>
+      </div>
+      <div class="chat-body">
+        <div class="chat-hist" id="chat-hist">
+          <div class="cmsg asst">
+            <span class="csndr">Physics AI</span>
+            <p class="ctxt">Greetings Operator. I am the Aditya-L1 Space Weather Advisory AI, monitoring SoLEXS soft X-ray and HEL1OS hard X-ray telemetry in real time. I can explain solar physics, analyze current observations, interpret ML predictions, and provide operational directives. Ask me anything or click a quick topic above.</p>
+          </div>
+        </div>
+        <div class="chat-input-row">
+          <input type="text" id="chat-input" placeholder="Type your space weather query...">
+          <button class="send-btn" id="btn-send">SEND ▶</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /btm-section -->
+
+<script src="dashboard.js"></script>
+</body>
+</html>
