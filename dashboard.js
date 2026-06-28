@@ -1535,6 +1535,7 @@ function updateDashboard(solexs,hel1os) {
   if(c){c.textContent='M'+(Math.floor(pm/12)+1);c.style.color='#f97316';}
   notifFired=false; checkNotification('high');
   AudioSynth.startAlarm('high');
+  triggerCME(solexs);
  } else if(solexs>400){
   pm=Math.min(65,35+(solexs-400)*0.05); px=Math.min(25,5+(solexs-400)*0.025);
   pC=Math.min(80,55); pB=88; ac='med';
@@ -1651,6 +1652,233 @@ document.getElementById('speed-slider').addEventListener('input',e=>{
 });
 
 // ================================================================
+// ☄ INTERPLANETARY CME PROPAGATION SIMULATOR (Drag-Based Model)
+// ================================================================
+const cmeCanvas = document.getElementById('cmeCanvas');
+const cmeCtx = cmeCanvas ? cmeCanvas.getContext('2d') : null;
+let cmeActive = false;
+let cmeProgress = 0; // 0 to 1
+let cmeSpeed = 0; // km/s
+let cmeStartV = 1200; // v0
+let cmeWindV = 450; // vw
+let cmeToaSeconds = 0;
+let cmeTimeElapsed = 0; // in seconds
+
+function resizeCmeCanvas() {
+ if (!cmeCanvas) return;
+ const wrap = cmeCanvas.parentElement;
+ cmeCanvas.width = wrap.clientWidth;
+ cmeCanvas.height = 250;
+}
+window.addEventListener('resize', resizeCmeCanvas);
+
+function calculateCMETransit(v0, vw) {
+ const D = 1.485e8; // Distance from Sun to L1 in km
+ const gamma = 1.0e-7; // Drag coefficient
+ let x = 0, t = 0, steps = 500, dx = D / steps;
+ for (let i = 0; i < steps; i++) {
+  const v = vw + (v0 - vw) * Math.exp(-gamma * x);
+  t += dx / v;
+  x += dx;
+ }
+ return t; // Transit time to L1 in seconds
+}
+
+function calculateCMETransitToEarth(v0, vw) {
+ const D = 1.5e8; // Distance from Sun to Earth in km
+ const gamma = 1.0e-7;
+ let x = 0, t = 0, steps = 500, dx = D / steps;
+ for (let i = 0; i < steps; i++) {
+  const v = vw + (v0 - vw) * Math.exp(-gamma * x);
+  t += dx / v;
+  x += dx;
+ }
+ return t; // Transit time to Earth in seconds
+}
+
+function triggerCME(solexs) {
+ if (cmeActive) return;
+ cmeActive = true;
+ cmeProgress = 0;
+ const tNow = Date.now() / 1000;
+ cmeWindV = Math.round(452 + 30 * Math.sin(tNow * 0.05));
+ cmeStartV = Math.round(1000 + (solexs - 1000) * 0.4 + Math.random() * 200);
+ 
+ cmeToaSeconds = calculateCMETransitToEarth(cmeStartV, cmeWindV);
+ cmeTimeElapsed = 0;
+ 
+ setText('cme-v0', cmeStartV + ' km/s');
+ setText('cme-vw', cmeWindV + ' km/s');
+ 
+ const date = new Date(Date.now() + cmeToaSeconds * 1000);
+ setText('cme-toa', date.toLocaleDateString() + ' ' + date.toLocaleTimeString().slice(0, 5));
+ 
+ const status = document.getElementById('cme-alert-status');
+ if (status) {
+  status.textContent = '⚠ ACTIVE CME TRACKING';
+  status.style.background = 'rgba(239,68,68,0.15)';
+  status.style.borderColor = 'rgba(239,68,68,0.4)';
+  status.style.color = 'var(--red)';
+ }
+ 
+ const warn = document.getElementById('cme-warning');
+ if (warn) warn.style.display = 'none';
+}
+
+function drawCmeTrack() {
+ requestAnimationFrame(drawCmeTrack);
+ if (!cmeCanvas || !cmeCtx) return;
+ 
+ const W = cmeCanvas.width;
+ const H = cmeCanvas.height;
+ cmeCtx.clearRect(0, 0, W, H);
+ 
+ // Background coordinates grid
+ cmeCtx.strokeStyle = 'rgba(0, 212, 255, 0.03)';
+ cmeCtx.lineWidth = 0.5;
+ for (let x = 0; x < W; x += 40) {
+  cmeCtx.beginPath(); cmeCtx.moveTo(x, 0); cmeCtx.lineTo(x, H); cmeCtx.stroke();
+ }
+ for (let y = 0; y < H; y += 40) {
+  cmeCtx.beginPath(); cmeCtx.moveTo(0, y); cmeCtx.lineTo(W, y); cmeCtx.stroke();
+ }
+ 
+ const sunX = 50;
+ const sunY = H / 2;
+ const earthX = W - 70;
+ const earthY = H / 2;
+ const L1X = sunX + (earthX - sunX) * 0.88; // Visually scale L1 to 88% for clear spacing
+ 
+ // Earth's Orbit Arc
+ cmeCtx.strokeStyle = 'rgba(59, 130, 246, 0.12)';
+ cmeCtx.setLineDash([4, 6]);
+ cmeCtx.beginPath();
+ cmeCtx.arc(sunX, sunY, earthX - sunX, -Math.PI / 4, Math.PI / 4);
+ cmeCtx.stroke();
+ cmeCtx.setLineDash([]);
+ 
+ // L1 Point Crosshair
+ cmeCtx.strokeStyle = 'rgba(250, 204, 21, 0.3)';
+ cmeCtx.lineWidth = 1;
+ cmeCtx.beginPath();
+ cmeCtx.moveTo(L1X, sunY - 12); cmeCtx.lineTo(L1X, sunY + 12);
+ cmeCtx.moveTo(L1X - 12, sunY); cmeCtx.lineTo(L1X + 12, sunY);
+ cmeCtx.stroke();
+ cmeCtx.fillStyle = 'rgba(250, 204, 21, 0.7)';
+ cmeCtx.font = '9px JetBrains Mono, monospace';
+ cmeCtx.fillText('L1 Point', L1X - 22, sunY - 16);
+ 
+ // Aditya-L1 Spacecraft in Halo Orbit
+ const t = Date.now() / 1000;
+ const haloX = L1X + 10 * Math.sin(t * 1.5);
+ const haloY = sunY + 16 * Math.cos(t * 1.5);
+ 
+ cmeCtx.strokeStyle = 'rgba(16, 185, 129, 0.18)';
+ cmeCtx.beginPath();
+ cmeCtx.ellipse(L1X, sunY, 10, 16, 0, 0, Math.PI * 2);
+ cmeCtx.stroke();
+ 
+ cmeCtx.fillStyle = 'var(--green)';
+ cmeCtx.beginPath(); cmeCtx.arc(haloX, haloY, 3.5, 0, Math.PI * 2); cmeCtx.fill();
+ cmeCtx.fillStyle = 'rgba(16, 185, 129, 0.3)';
+ cmeCtx.beginPath(); cmeCtx.arc(haloX, haloY, 7 + 2 * Math.sin(t * 5), 0, Math.PI * 2); cmeCtx.fill();
+ cmeCtx.fillStyle = '#94a3b8';
+ cmeCtx.fillText('Aditya-L1', haloX + 10, haloY + 3);
+ 
+ // Earth
+ cmeCtx.fillStyle = '#3b82f6';
+ cmeCtx.beginPath(); cmeCtx.arc(earthX, earthY, 7, 0, Math.PI * 2); cmeCtx.fill();
+ cmeCtx.fillStyle = 'rgba(59, 130, 246, 0.2)';
+ cmeCtx.beginPath(); cmeCtx.arc(earthX, earthY, 11, 0, Math.PI * 2); cmeCtx.fill();
+ cmeCtx.fillStyle = '#fff';
+ cmeCtx.font = 'bold 9px Orbitron, sans-serif';
+ cmeCtx.fillText('Earth', earthX - 16, earthY + 20);
+ 
+ // Sun
+ const sunG = cmeCtx.createRadialGradient(sunX, sunY, 4, sunX, sunY, 24);
+ sunG.addColorStop(0, '#fff');
+ sunG.addColorStop(0.2, '#facc15');
+ sunG.addColorStop(0.6, '#f97316');
+ sunG.addColorStop(1, 'rgba(0,0,0,0)');
+ cmeCtx.fillStyle = sunG;
+ cmeCtx.beginPath(); cmeCtx.arc(sunX, sunY, 24, 0, Math.PI * 2); cmeCtx.fill();
+ cmeCtx.fillStyle = '#94a3b8';
+ cmeCtx.fillText('Sun', sunX - 10, sunY + 36);
+ 
+ // CME Shockwave Cloud
+ if (cmeActive) {
+  cmeTimeElapsed += 45000; // Accelerated time steps for visualization
+  
+  const gamma = 1e-7;
+  let x = 0, tempT = 0, dx = 1.5e8 / 300;
+  for (let i = 0; i < 300; i++) {
+   const v = cmeWindV + (cmeStartV - cmeWindV) * Math.exp(-gamma * x);
+   tempT += dx / v;
+   if (tempT >= cmeTimeElapsed) {
+    cmeProgress = x / 1.5e8;
+    cmeSpeed = v;
+    break;
+   }
+   x += dx;
+  }
+  
+  if (cmeTimeElapsed >= cmeToaSeconds) {
+   cmeProgress = 1.0;
+   cmeSpeed = cmeWindV;
+  }
+  
+  const cloudX = sunX + (earthX - sunX) * cmeProgress;
+  const frontR = (cloudX - sunX);
+  const op = 0.5 * (1.0 - cmeProgress * 0.65);
+  
+  const grad = cmeCtx.createRadialGradient(sunX, sunY, frontR * 0.75, sunX, sunY, frontR + 20);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(0.75, `rgba(249, 115, 22, ${op * 0.45})`);
+  grad.addColorStop(0.95, `rgba(239, 68, 68, ${op})`);
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  
+  cmeCtx.fillStyle = grad;
+  cmeCtx.beginPath();
+  cmeCtx.arc(sunX, sunY, frontR + 20, -Math.PI / 5, Math.PI / 5);
+  cmeCtx.arc(sunX, sunY, frontR * 0.75, Math.PI / 5, -Math.PI / 5, true);
+  cmeCtx.closePath();
+  cmeCtx.fill();
+  
+  const remaining = Math.max(0, cmeToaSeconds - cmeTimeElapsed);
+  setText('cme-countdown', remaining > 0 ? (remaining / 3600).toFixed(1) + ' hours' : 'IMPACTED');
+  setText('cme-prob', (cmeProgress * 100).toFixed(0) + '%');
+  
+  // Sat Warning
+  if (cloudX >= L1X && remaining > 0) {
+   cmeCtx.fillStyle = 'rgba(239, 68, 68, 0.15)';
+   cmeCtx.beginPath(); cmeCtx.arc(haloX, haloY, 18 + 4 * Math.sin(t * 8), 0, Math.PI * 2); cmeCtx.fill();
+   cmeCtx.fillStyle = 'var(--red)';
+   cmeCtx.font = 'bold 8px JetBrains Mono, monospace';
+   cmeCtx.fillText('SENSOR OVERLOAD RISK', haloX + 12, haloY - 8);
+  }
+  
+  // Earth Impact
+  if (cmeProgress >= 1.0) {
+   cmeActive = false;
+   const status = document.getElementById('cme-alert-status');
+   if (status) {
+    status.textContent = '● GEOMAGNETIC IMPACT';
+    status.style.background = 'rgba(239, 68, 68, 0.15)';
+    status.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+    status.style.color = 'var(--red)';
+   }
+   const warn = document.getElementById('cme-warning');
+   if (warn) warn.style.display = 'block';
+   
+   cmeCtx.fillStyle = 'rgba(239, 68, 68, 0.25)';
+   cmeCtx.beginPath(); cmeCtx.arc(earthX, earthY, 30, 0, Math.PI * 2); cmeCtx.fill();
+  }
+ }
+}
+resizeCmeCanvas();
+requestAnimationFrame(drawCmeTrack);
+
+// ================================================================
 // TAB SWITCHING
 // ================================================================
 function switchTab(name,panelId,btn) {
@@ -1664,6 +1892,8 @@ function switchTab(name,panelId,btn) {
   const padded=Array(100-cur.length).fill(null).concat(cur);
   histChart.data.datasets[0].data=padded;
   histChart.update('none');
+ } else if(name==='cme') {
+  resizeCmeCanvas();
  }
 }
 

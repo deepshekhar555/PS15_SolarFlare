@@ -189,6 +189,7 @@
     <button class="tbtn" onclick="switchTab('qpp','tab-qpp',this)">〰 QPP Spectrum</button>
     <button class="tbtn" onclick="switchTab('hist','tab-hist',this)">📜 Historical Comparison</button>
     <button class="tbtn" onclick="switchTab('fore','tab-fore',this)">🔮 30-min Forecast</button>
+    <button class="tbtn" onclick="switchTab('cme','tab-cme',this)">☄ CME Orbit Tracker</button>
     <button class="tbtn" onclick="switchTab('chat','tab-chat',this)">🤖 AI Assistant</button>
   </div>
 
@@ -355,6 +356,36 @@
         </div>
         <div class="fore-warning" id="fore-warning" style="display:none">
           ⚠ FORECAST WARNING: Predicted counts may exceed CRITICAL threshold within 30 minutes. Recommend initiating satellite protection protocols.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: CME Orbit Tracker -->
+  <div class="tab-panel" id="tab-cme">
+    <div class="fore-layout">
+      <div class="glass">
+        <div class="card-hdr">
+          <span class="clbl">☄ INTERPLANETARY CME PROPAGATION — DRAG-BASED MODEL (DBM)</span>
+          <span class="chip" id="cme-alert-status" style="background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.3);color:var(--green)">● NO ACTIVE CME</span>
+        </div>
+        <div class="chart-wrap h260" style="position:relative; background:#020206; border-radius:6px; border:1px solid var(--brd);">
+          <canvas id="cmeCanvas"></canvas>
+        </div>
+        <p class="shap-note">↑ 3D orbital plane view of the Inner Solar System. Tracks Sun (center), Earth (right), L1 Point (middle), and Aditya-L1 spacecraft in its halo orbit. Erupted CMEs are modeled propagating through the solar wind.</p>
+      </div>
+      <div class="glass">
+        <div class="card-hdr"><span class="clbl">📋 CME TRANSIT FORECAST</span></div>
+        <div class="fore-stats">
+          <div class="fs-row"><span class="fsl">Ejection Velocity (v₀):</span><span class="fsv" id="cme-v0">--</span></div>
+          <div class="fs-row"><span class="fsl">Solar Wind Speed (vw):</span><span class="fsv" id="cme-vw">--</span></div>
+          <div class="fs-row"><span class="fsl">Transit Drag (Cd):</span><span class="fsv">1.00 × 10⁻⁷ km⁻¹</span></div>
+          <div class="fs-row"><span class="fsl">Estimated Arrival (ToA):</span><span class="fsv" id="cme-toa">--</span></div>
+          <div class="fs-row"><span class="fsl">Time Remaining:</span><span class="fsv" id="cme-countdown">--</span></div>
+          <div class="fs-row"><span class="fsl">Earth Impact Risk:</span><span class="fsv" id="cme-prob">0.0%</span></div>
+        </div>
+        <div class="fore-warning" id="cme-warning" style="display:none;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:6px;font-size:0.68rem;color:var(--red);line-height:1.4">
+          ⚠ CME IMPACT WARNING: High-speed coronal mass ejection is propagating towards Earth. Geomagnetic storm (G3-G5 class) expected. Recommend preparing satellite safe-mode and power grid protection.
         </div>
       </div>
     </div>
