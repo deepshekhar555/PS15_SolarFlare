@@ -470,130 +470,44 @@ function drawSun(ts) {
  }
  sunCtx.fillStyle=dg; sunCtx.fillRect(0,0,w,h);
 
-  // --- 100% Procedural Solar Surface Convection Engine (Boiling Plasma) ---
+ // --- 3D Rotating Solar Sphere (Local Real-Eye Images) ---
+ if (!window.LOCAL_SUN_IMGS) {
+  window.LOCAL_SUN_IMGS = {
+   '304': new Image(),
+   '171': new Image(),
+   '193': new Image(),
+   'hmi': new Image()
+  };
+  window.LOCAL_SUN_IMGS['304'].src = 'sun_orange.png';
+  window.LOCAL_SUN_IMGS['171'].src = 'sun_yellow.png';
+  window.LOCAL_SUN_IMGS['193'].src = 'sun_purple.png';
+  window.LOCAL_SUN_IMGS['hmi'].src = 'sun_yellow.png';
+ }
+
+ const localImg = window.LOCAL_SUN_IMGS[wavelength];
+ let drawSuccess = false;
+ 
+ if (localImg && localImg.complete && localImg.naturalWidth > 0) {
   sunCtx.globalCompositeOperation = wavelength === 'hmi' ? 'source-over' : 'screen';
+  sunCtx.globalAlpha = wavelength === 'hmi' ? 0.85 : 0.98;
   
-  // 1. Fermat's Spiral Distribution of Convective Plasma Cells (Granules)
-  const numCells = 160;
-  for (let i = 0; i < numCells; i++) {
-   const angle = i * 2.39996 + sunTime * 0.008; // Golden angle + slow solar rotation
-   const rRatio = Math.sqrt(i / numCells) * 0.96;
-   const px = cx + Math.cos(angle) * R * rRatio;
-   const py = cy + Math.sin(angle) * R * rRatio;
-   
-   // Pulsate brightness and size out-of-phase to simulate boiling convection
-   const phase = i * 0.72;
-   const pulse = 0.4 + 0.6 * Math.sin(sunTime * 1.6 + phase);
-   const size = R * 0.075 * (0.8 + 0.2 * Math.cos(sunTime * 1.1 + phase));
-   
-   // Draw convective cell
-   const cg = sunCtx.createRadialGradient(px, py, 0, px, py, size);
-   const cellOpacity = (0.07 + 0.11 * pulse) * (1.0 - rRatio * 0.45); // limb fading
-   cg.addColorStop(0, `rgba(${WL.granCol}, ${cellOpacity})`);
-   cg.addColorStop(0.5, `rgba(${WL.arCol}, ${cellOpacity * 0.4})`);
-   cg.addColorStop(1, 'rgba(0,0,0,0)');
-   
-   sunCtx.fillStyle = cg;
-   sunCtx.beginPath(); sunCtx.arc(px, py, size, 0, Math.PI * 2); sunCtx.fill();
-  }
-
-  // 2. Dynamic Magnetic Filaments (Writhing Plasma Rivers)
-  if (wavelength !== 'hmi') {
-   const numFilaments = 6;
-   for (let i = 0; i < numFilaments; i++) {
-    const fAngle = (i * Math.PI / 3) + sunTime * 0.012;
-    const x0 = cx + Math.cos(fAngle) * R * 0.65;
-    const y0 = cy + Math.sin(fAngle) * R * 0.65;
-    const x1 = cx + Math.cos(fAngle + Math.PI * 0.75) * R * 0.55;
-    const y1 = cy + Math.sin(fAngle + Math.PI * 0.75) * R * 0.55;
-    
-    const cp1x = cx + Math.cos(sunTime * 0.6 + i) * R * 0.35;
-    const cp1y = cy + Math.sin(sunTime * 0.5 + i) * R * 0.35;
-    const cp2x = cx + Math.cos(sunTime * 0.4 - i) * R * 0.25;
-    const cp2y = cy + Math.sin(sunTime * 0.8 + i) * R * 0.25;
-    
-    sunCtx.beginPath();
-    sunCtx.moveTo(x0, y0);
-    sunCtx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x1, y1);
-    
-    const fAlpha = (0.12 + 0.18 * Math.sin(sunTime * 2.2 + i)) * (1.0 + flareI * 2.5);
-    sunCtx.strokeStyle = `rgba(${WL.arCol}, ${fAlpha})`;
-    sunCtx.lineWidth = (1.2 + Math.sin(sunTime * 2.8 + i) * 0.4) * (1.0 + flareI * 3.5);
-    sunCtx.stroke();
-   }
-  }
-
-  // 3. Spreading Solar Flares & Shockwaves (Eruption Wave)
-  if (flareI > 0.05) {
-   const ar = ARs[flareAR];
-   const ax = cx + ar.nx * R;
-   const ay = cy + ar.ny * R;
-   
-   // Expanding shockwave ring
-   const waveRadius = R * 0.65 * flareI * (1.0 + 0.12 * Math.sin(sunTime * 12));
-   
-   sunCtx.beginPath();
-   sunCtx.arc(ax, ay, waveRadius, 0, Math.PI * 2);
-   sunCtx.strokeStyle = `rgba(255, 255, 255, ${0.45 * flareI * (0.6 + 0.4 * Math.sin(sunTime * 15))})`;
-   sunCtx.lineWidth = 2.5 + flareI * 7.0;
-   sunCtx.shadowColor = `rgb(${WL.arCol})`;
-   sunCtx.shadowBlur = 12;
-   sunCtx.stroke();
-   sunCtx.shadowBlur = 0; // reset shadow
-   
-   // Core glowing hot zone
-   const flareG = sunCtx.createRadialGradient(ax, ay, waveRadius * 0.15, ax, ay, waveRadius);
-   flareG.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-   flareG.addColorStop(0.2, `rgba(${WL.arCol}, 0.85)`);
-   flareG.addColorStop(0.5, `rgba(${WL.coronaCol}, 0.55)`);
-   flareG.addColorStop(1, 'rgba(0,0,0,0)');
-   
-   sunCtx.fillStyle = flareG;
-   sunCtx.beginPath(); sunCtx.arc(ax, ay, waveRadius, 0, Math.PI * 2); sunCtx.fill();
-  }
-
-  // 4. Coronal Mass Ejection (CME) Particles & Coronal Rain
-  if (flareI > 0.1) {
-   if (Math.random() < 0.35 + flareI * 0.55) {
-    const ar = ARs[flareAR];
-    const ax = cx + ar.nx * R;
-    const ay = cy + ar.ny * R;
-    const pAng = Math.random() * Math.PI * 2;
-    const speed = R * 0.012 * (1.0 + flareI * 2.0);
-    if (!window.cmeParticles) window.cmeParticles = [];
-    window.cmeParticles.push({
-     x: ax,
-     y: ay,
-     vx: Math.cos(pAng) * speed + (Math.random() - 0.5) * R * 0.005,
-     vy: Math.sin(pAng) * speed + (Math.random() - 0.5) * R * 0.005,
-     size: R * 0.014 * (1.0 + Math.random() * 1.5),
-     life: 1.0,
-     decay: 0.022 + Math.random() * 0.028
-    });
-   }
-  }
+  // 1. Draw the high-resolution base solar photography centered (stable base)
+  sunCtx.drawImage(localImg, cx - R * 1.02, cy - R * 1.02, R * 2.04, R * 2.04);
   
-  if (window.cmeParticles) {
-   for (let i = window.cmeParticles.length - 1; i >= 0; i--) {
-    const p = window.cmeParticles[i];
-    p.x += p.vx; p.y += p.vy;
-    p.life -= p.decay;
-    if (p.life <= 0) {
-     window.cmeParticles.splice(i, 1);
-     continue;
-    }
-    
-    const dist = Math.sqrt((p.x - cx)**2 + (p.y - cy)**2);
-    const alpha = p.life * (dist > R ? 0.65 : 0.22); // brighter outside the disk
-    
-    sunCtx.beginPath();
-    sunCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    sunCtx.fillStyle = `rgba(${WL.arCol}, ${alpha})`;
-    sunCtx.fill();
-   }
-  }
+  // 2. Draw a sliding atmospheric texture layer (masked to the solar disk) to simulate 3D rotation
+  sunCtx.save();
+  sunCtx.beginPath(); sunCtx.arc(cx, cy, R * 0.96, 0, Math.PI * 2); sunCtx.clip();
   
-  // 5. Apply a spherical 3D lens gradient (limb darkening) to create a perfect 3D volume
+  // Translate the texture horizontally based on time
+  const shiftX = (sunTime * 6.5) % (R * 2);
+  sunCtx.globalAlpha = wavelength === 'hmi' ? 0.22 : 0.35; // overlay opacity for surface flow
+  sunCtx.drawImage(localImg, cx - R - shiftX, cy - R, R * 2, R * 2);
+  sunCtx.drawImage(localImg, cx - R - shiftX + R * 2, cy - R, R * 2, R * 2);
+  
+  sunCtx.restore();
+  sunCtx.globalAlpha = wavelength === 'hmi' ? 0.85 : 0.98;
+  
+  // 3. Apply a spherical 3D lens gradient (limb darkening) to create a perfect 3D volume
   const lens = sunCtx.createRadialGradient(cx - R * 0.15, cy - R * 0.15, R * 0.2, cx, cy, R);
   lens.addColorStop(0, 'rgba(0,0,0,0)');
   lens.addColorStop(0.5, 'rgba(0,0,0,0.05)');
@@ -606,6 +520,30 @@ function drawSun(ts) {
   
   sunCtx.globalAlpha = 1.0;
   sunCtx.globalCompositeOperation = 'source-over';
+  drawSuccess = true;
+ }
+
+ // --- Fallback to SDO Satellite Feed (if local images aren't loaded) ---
+ let realImg = null;
+ if (!drawSuccess) {
+  if (!window.SDO_IMGS) {
+   window.SDO_IMGS = { '304': new Image(), '171': new Image(), '193': new Image(), 'hmi': new Image() };
+   window.SDO_IMGS['304'].crossOrigin = "Anonymous"; window.SDO_IMGS['304'].src = 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0304.jpg';
+   window.SDO_IMGS['171'].crossOrigin = "Anonymous"; window.SDO_IMGS['171'].src = 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0171.jpg';
+   window.SDO_IMGS['193'].crossOrigin = "Anonymous"; window.SDO_IMGS['193'].src = 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0193.jpg';
+   window.SDO_IMGS['hmi'].crossOrigin = "Anonymous"; window.SDO_IMGS['hmi'].src = 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_HMIB.jpg';
+  }
+  
+  realImg = window.SDO_IMGS[wavelength];
+  if (realImg && realImg.complete && realImg.naturalWidth > 0) {
+   sunCtx.globalCompositeOperation = wavelength === 'hmi' ? 'source-over' : 'screen';
+   sunCtx.globalAlpha = wavelength === 'hmi' ? 0.7 : 0.95;
+   sunCtx.drawImage(realImg, cx - R*1.04, cy - R*1.04, R*2.08, R*2.08); // slightly larger to hide edge
+   sunCtx.globalAlpha = 1.0;
+   sunCtx.globalCompositeOperation = 'source-over';
+   drawSuccess = true;
+  }
+ }
 
 
  // --- Solar Surface Granulation & Texture (Fallback if SDO fails) ---
