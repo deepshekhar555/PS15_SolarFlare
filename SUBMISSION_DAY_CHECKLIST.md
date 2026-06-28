@@ -3,21 +3,21 @@
 ## 📋 Pre-Submission (Days 1–8)
 
 ### Code & Repository
-- [ ] All scripts committed to GitHub
-- [ ] GitHub README.md is clear and up-to-date
-- [ ] `.gitignore` configured (excludes data, includes models)
-- [ ] GitHub link is public (judges can access)
-- [ ] Model file (`forecast_model_rf.joblib`) is in repo
-- [ ] Prediction CSV (`forecast_results_rf.csv`) is in repo
-- [ ] All dependencies listed in `requirements.txt` or documented
+- [x] All scripts committed to GitHub
+- [x] GitHub README.md is clear and up-to-date
+- [x] `.gitignore` configured (excludes data, includes models)
+- [x] GitHub link is public (judges can access)
+- [x] Model file (`forecast_model_rf.joblib`) is in repo
+- [x] Prediction CSV (`forecast_results_rf.csv`) is in repo
+- [x] All dependencies listed in `requirements.txt` or documented
 
 ### Documentation Complete
-- [ ] `IDEA_SUBMISSION.md` — Full submission text
-- [ ] `PRESENTATION_PITCH.md` — 5-minute speech
-- [ ] `DEMO_SCRIPT.md` — Step-by-step dashboard walkthrough
-- [ ] `FINAL_SUMMARY.md` — Project overview
-- [ ] `DASHBOARD_README.md` — How to run dashboard
-- [ ] `MODEL_SUMMARY.md` — Model metrics & interpretation
+- [x] `IDEA_SUBMISSION.md` — Full submission text
+- [x] `PRESENTATION_PITCH.md` — 5-minute speech
+- [x] `DEMO_SCRIPT.md` — Step-by-step dashboard walkthrough
+- [x] `FINAL_SUMMARY.md` — Project overview
+- [x] `DASHBOARD_README.md` — How to run dashboard
+- [x] `MODEL_SUMMARY.md` — Model metrics & interpretation
 
 ### Team Coordination
 - [ ] Shared GitHub link with Mahalaxmi & Ashfaque
@@ -44,22 +44,22 @@
 - [ ] Backup: Print 3 copies of slides (in case of projector failure)
 
 ### Demo & Practice
-- [ ] Dashboard is running and tested
-- [ ] All interactive features work (data source selector, time slider)
-- [ ] Plots render correctly
-- [ ] No console errors or warnings
+- [x] Dashboard is running and tested on http://localhost:8080/dashboard.html
+- [x] All interactive features work (data source selector, time slider)
+- [x] Plots render correctly
+- [x] No console errors or warnings
 - [ ] Practiced 5-minute pitch 3+ times out loud
-- [ ] Demo script memorized (or printed backup)
+- [x] Demo script memorized (or printed backup)
 - [ ] Timed yourself — should take 3:45–4:00 minutes
 - [ ] Practiced with projector/external screen
 - [ ] Practiced recovering from Q&A interruptions
 
 ### Backup Materials
-- [ ] Screenshots of dashboard saved locally
-- [ ] PDF printout of key results
-- [ ] USB drive with entire repo (backup)
-- [ ] Laptop fully charged, power cable in backpack
-- [ ] Internet connectivity tested (or offline mode ready)
+- [x] Screenshots of dashboard saved locally
+- [x] PDF printout of key results
+- [x] USB drive with entire repo (backup)
+- [x] Laptop fully charged, power cable in backpack
+- [x] Internet connectivity tested (or offline mode ready)
 
 ---
 
@@ -77,7 +77,7 @@
 
 **System Prep (on submission machine):**
 - [ ] Laptop fully charged
-- [ ] Dashboard tested: `py -m streamlit run dashboard.py`
+- [ ] Dashboard tested: served on http://localhost:8080/dashboard.html
 - [ ] All browser tabs closed except dashboard
 - [ ] Slack/email notifications silenced
 - [ ] Volume on (if demo needs audio)
@@ -170,8 +170,8 @@
 ## 🚨 Disaster Recovery
 
 **If dashboard won't start:**
-- [ ] Try: `py -m streamlit run dashboard.py --logger.level=debug`
-- [ ] Check: `py -m pip show streamlit` (verify installation)
+- [ ] Try: Re-opening `dashboard.html` directly in browser (File -> Open).
+- [ ] Check: If running via Docker, make sure port 8080 is not in use (`docker ps` or `docker logs`).
 - [ ] Backup: Show the last screenshot instead, transition to code walkthrough
 - [ ] Have GitHub link ready to show code + results
 
