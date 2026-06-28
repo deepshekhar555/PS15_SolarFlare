@@ -885,28 +885,46 @@ function drawWorldMap(ts) {
   mapCtx.closePath(); mapCtx.fill(); mapCtx.stroke();
  }
 
- // Ionospheric Blackout (dayside) — during HIGH flare
- if (showBlackout && flareI>0.1) {
-  const now=new Date();
-  const solarLon=(now.getUTCHours()/24+now.getUTCMinutes()/1440)*360-180;
-  const subX=lonLatToXY(solarLon,0,W,H)[0];
-  const span=W*0.55*flareI;
-  const bo=mapCtx.createRadialGradient(subX,H/2,0,subX,H/2,span);
-  const ba=0.5*flareI;
-  bo.addColorStop(0,`rgba(180,30,0,${ba})`);
-  bo.addColorStop(0.4,`rgba(140,20,0,${ba*0.6})`);
-  bo.addColorStop(0.7,`rgba(100,10,0,${ba*0.25})`);
-  bo.addColorStop(1,'rgba(60,0,0,0)');
-  mapCtx.beginPath(); mapCtx.ellipse(subX,H/2,span,H*0.6,0,0,Math.PI*2);
-  mapCtx.fillStyle=bo; mapCtx.fill();
+ // Ionospheric Blackout (dayside) — dynamically calculated from live SoLEXS & HEL1OS telemetry
+ const activeSolexs = window.lastSolexsValue || 10;
+ const activeHel1os = window.lastHel1osValue || 10;
+ const dbAbsorption = Math.max(0, Math.log10(activeSolexs) * 12 + Math.log10(activeHel1os) * 4 - 20); // physical dB estimation
+ const absorptionRatio = Math.min(1.0, dbAbsorption / 30); // scale to 0-1
+ 
+ if (showBlackout && absorptionRatio > 0.05) {
+  const now = new Date();
+  
+  // 1. Dynamic Sub-Solar Longitude based on UTC time
+  const solarLon = -((now.getUTCHours() + now.getUTCMinutes()/60 + now.getUTCSeconds()/3600) / 24) * 360 + 180;
+  
+  // 2. Dynamic Sub-Solar Latitude (declination) based on day of year (seasonal drift)
+  const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+  const solarLat = 23.44 * Math.sin((2 * Math.PI / 365) * (dayOfYear - 80));
+  
+  const [subX, subY] = lonLatToXY(solarLon, solarLat, W, H);
+  
+  // 3. Size and opacity scale dynamically with live SoLEXS & HEL1OS flux
+  const span = W * 0.65 * absorptionRatio;
+  const bo = mapCtx.createRadialGradient(subX, subY, 0, subX, subY, span);
+  const opacity = 0.65 * absorptionRatio;
+  
+  bo.addColorStop(0, `rgba(239, 68, 68, ${opacity})`);       // Red core (strong absorption)
+  bo.addColorStop(0.35, `rgba(249, 115, 22, ${opacity * 0.6})`); // Orange middle (moderate)
+  bo.addColorStop(0.7, `rgba(234, 179, 8, ${opacity * 0.25})`);  // Yellow edge (weak)
+  bo.addColorStop(1, 'rgba(0,0,0,0)');
+  
+  mapCtx.beginPath(); 
+  mapCtx.ellipse(subX, subY, span, H * 0.65 * absorptionRatio, 0, 0, Math.PI * 2);
+  mapCtx.fillStyle = bo; 
+  mapCtx.fill();
 
   // Blackout label
-  mapCtx.fillStyle=`rgba(255,80,0,${0.7*flareI})`;
-  mapCtx.font=`bold ${Math.round(W*0.018)}px JetBrains Mono, monospace`;
-  mapCtx.textAlign='center';
-  mapCtx.fillText('HF RADIO BLACKOUT ZONE',subX,H*0.12);
-  mapCtx.textAlign='left';
- }
+  mapCtx.fillStyle = `rgba(255, 80, 0, ${0.8 * absorptionRatio})`;
+  mapCtx.font = `bold ${Math.round(W * 0.016)}px JetBrains Mono, monospace`;
+  mapCtx.textAlign = 'center';
+  mapCtx.fillText(`HF BLACKOUT: -${dbAbsorption.toFixed(1)} dB (D-REGION IONIZATION)`, subX, subY - 15);
+  mapCtx.textAlign = 'left';
+ };
 
  // Satellite orbits
  if (showOrbits) {
