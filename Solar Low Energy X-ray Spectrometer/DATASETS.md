@@ -1,5 +1,13 @@
 DATASETS used in this repository
 
+### 🌐 Project Hosted Datasets
+Due to the file size limitations of large raw telemetry data (~900MB), the raw instrument files and pre-processed ML-ready tables are hosted externally:
+* **Hugging Face Hub Repository**: `https://huggingface.co/datasets/YOUR_USERNAME/aditya-l1-solar-flare` *(Placeholder - update after uploading)*
+* **Google Drive Public Link (Full ZIP)**: `https://drive.google.com/open?id=YOUR_FILE_ID` *(Placeholder - update after uploading)*
+* For detailed instructions on how to upload or download these packages, refer to the root [SHARE_DATASET.md](../SHARE_DATASET.md) guide.
+
+---
+
 1) SoLEXS combined lightcurves (local)
 - Description: Combined SoLEXS FITS lightcurve files (Aditya-L1 instrument).
 - Local path used in this repo: `data/` (original inputs) and `output/solexs_combined.csv` (combined CSV)

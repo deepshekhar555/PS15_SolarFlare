@@ -337,6 +337,16 @@ body::before {
 .send-btn:hover{background:#33daff;box-shadow:0 0 12px rgba(0,212,255,0.4)}
 .chat-chips{display:flex;gap:0.3rem;flex-wrap:wrap}
 
+/* ===== SEP TAB ===== */
+.sep-layout{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:0.6rem}
+
+/* ===== PRECURSOR BANNER ANIMATION ===== */
+#precursor-banner{animation:precursor-pulse 2.5s infinite}
+@keyframes precursor-pulse{
+  0%,100%{border-color:rgba(168,85,247,0.45);box-shadow:0 0 0 transparent}
+  50%{border-color:rgba(168,85,247,0.9);box-shadow:0 0 12px rgba(168,85,247,0.25)}
+}
+
 /* ===== PRINT STYLES ===== */
 @media print{
   body{background:#fff!important;color:#000!important;padding:0}

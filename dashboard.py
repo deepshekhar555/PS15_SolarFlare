@@ -755,6 +755,6 @@ st.markdown("""
 <div style="text-align: center; color: #71717a; font-size: 0.8rem; margin-top: 1rem;">
     SolarSentinels Solar Flare Forecasting Pipeline | Aditya-L1 Hackathon 2026
     <br>
-    <i>Team: Deep Shekhar, Mahalaxmi, Ashfaque | Adamas University, Kolkata</i>
+    <i>Team: Deep Shekhar, Rituraj Saha, Mahalaxmi, Ashfaque | Adamas University, Kolkata</i>
 </div>
 """, unsafe_allow_html=True)

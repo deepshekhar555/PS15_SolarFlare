@@ -83,6 +83,19 @@ PS15_SolarFlare/
 
 ---
 
+## 📊 Datasets & Data Sharing
+
+To facilitate collaboration and reproducibility, the datasets are packaged and can be hosted on external platforms (due to GitHub's file size limits for the ~900MB raw telemetry files).
+
+See the comprehensive [SHARE_DATASET.md](SHARE_DATASET.md) guide for detailed instructions on hosting, uploading, and downloading the datasets.
+
+* **Hugging Face Hub Dataset**: `https://huggingface.co/datasets/YOUR_USERNAME/aditya-l1-solar-flare` *(Placeholder - update after uploading)*
+* **Google Drive Link (Full Zip)**: `https://drive.google.com/open?id=YOUR_FILE_ID` *(Placeholder - update after uploading)*
+
+By downloading the pre-processed ML-ready files directly into the `output/` directory, users can bypass raw data ingestion and train the forecasting models immediately.
+
+---
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -135,9 +148,10 @@ Our Phase-1 prototype demonstrates a complete, working end-to-end pipeline. To s
 
 ## 👥 Team & Contact
 
-* **Team Name**: SolarSentinels
+* **Team Name**: SuryaDrishti (formerly SolarSentinels)
 * **Institutional Affiliation**: Adamas University, Kolkata
-* **Primary Investigator & Tech Lead**: Deep Shekhar (`deepshekhar555`)
-* **Data & Validation**: Mahalaxmi & Ashfaque
-
-For inquiries, please contact: `[Your Contact Email]`
+* **Team Members**:
+  * **Deep Shekhar Halder** (Team Lead & Tech Lead) - `deephalder209@gmail.com`
+  * **Rituraj Saha** (Feature Engineering & Visualization) - `saharituraj805@gmail.com`
+  * **Mahalaxmi Macha** (Data & Validation) - `mahalaxmimacha14@gmail.com`
+  * **Ashfaque Ahamed Khan** (Dashboard & Benchmarking) - `ashfaqueahamedkhan591@gmail.com`

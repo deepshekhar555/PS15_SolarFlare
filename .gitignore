@@ -51,3 +51,7 @@ backup_verified_20260619/
 !output/*.md
 !output/*.joblib
 !output/*.pkl
+
+# Large workspace zip (exceeds GitHub limits)
+PS15_SolarFlare.zip
+

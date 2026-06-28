@@ -183,15 +183,23 @@
 
 <!-- ═══════════════════════ BOTTOM TABS ═══════════════════════ -->
 <div class="btm-section">
-  <div class="tab-bar">
-    <button class="tbtn active" onclick="switchTab('map','tab-map',this)">🌍 Satellite Impact Map</button>
-    <button class="tbtn" onclick="switchTab('shap','tab-shap',this)">🧠 AI Explainability</button>
-    <button class="tbtn" onclick="switchTab('qpp','tab-qpp',this)">〰 QPP Spectrum</button>
-    <button class="tbtn" onclick="switchTab('hist','tab-hist',this)">📜 Historical Comparison</button>
-    <button class="tbtn" onclick="switchTab('fore','tab-fore',this)">🔮 30-min Forecast</button>
-    <button class="tbtn" onclick="switchTab('cme','tab-cme',this)">☄ CME Orbit Tracker</button>
-    <button class="tbtn" onclick="switchTab('dem','tab-dem',this)">🔬 DEM Diagnostics</button>
-    <button class="tbtn" onclick="switchTab('chat','tab-chat',this)">🤖 AI Assistant</button>
+  <!-- Pre-Flare Precursor Alert Banner -->
+  <div id="precursor-banner" style="display:none;margin:0 0 6px 0;padding:8px 14px;background:linear-gradient(90deg,rgba(168,85,247,0.18),rgba(59,130,246,0.12));border:1px solid rgba(168,85,247,0.45);border-radius:6px;font-size:0.68rem;color:#c4b5fd;letter-spacing:0.04em;display:flex;align-items:center;gap:10px">    <span style="font-size:1rem">🔮</span>
+    <span style="font-weight:700;color:#a78bfa">PRE-FLARE PRECURSOR DETECTED</span>
+    <span id="precursor-detail">SoLEXS derivative inflection ⬆ sustained &gt;45s — Estimated onset in ~<span id="precursor-eta" style="color:#fff;font-weight:700">--</span> min</span>
+    <span style="margin-left:auto;opacity:0.6" id="precursor-ts"></span>
+  </div>
+  <div class="tab-bar" role="tablist" aria-label="Dashboard Panels">
+    <button class="tbtn active" role="tab" aria-selected="true" aria-controls="tab-map" onclick="switchTab('map','tab-map',this)">🌍 Satellite Impact Map</button>
+    <button class="tbtn" role="tab" aria-selected="false" aria-controls="tab-shap" onclick="switchTab('shap','tab-shap',this)">🧠 AI Explainability</button>
+    <button class="tbtn" role="tab" aria-selected="false" aria-controls="tab-qpp" onclick="switchTab('qpp','tab-qpp',this)">〰 QPP Spectrum</button>
+    <button class="tbtn" role="tab" aria-selected="false" aria-controls="tab-hist" onclick="switchTab('hist','tab-hist',this)">📜 Historical Comparison</button>
+    <button class="tbtn" role="tab" aria-selected="false" aria-controls="tab-fore" onclick="switchTab('fore','tab-fore',this)">🔮 30-min Forecast</button>
+    <button class="tbtn" role="tab" aria-selected="false" aria-controls="tab-cme" onclick="switchTab('cme','tab-cme',this)">☄ CME Orbit Tracker</button>
+    <button class="tbtn" role="tab" aria-selected="false" aria-controls="tab-dem" onclick="switchTab('dem','tab-dem',this)">🔬 DEM Diagnostics</button>
+    <button class="tbtn" role="tab" aria-selected="false" aria-controls="tab-sep" onclick="switchTab('sep','tab-sep',this)">🌩 SEP Risk Engine</button>
+    <button class="tbtn" role="tab" aria-selected="false" aria-controls="tab-suit" style="border-color:rgba(168,85,247,0.5);color:#c4b5fd" onclick="switchTab('suit','tab-suit',this)">🔭 SUIT NUV Engine</button>
+    <button class="tbtn" role="tab" aria-selected="false" aria-controls="tab-chat" onclick="switchTab('chat','tab-chat',this)">🤖 AI Assistant</button>
   </div>
 
   <!-- TAB: Satellite Map -->
@@ -381,6 +389,8 @@
           <div class="fs-row"><span class="fsl">Ejection Velocity (v₀):</span><span class="fsv" id="cme-v0">--</span></div>
           <div class="fs-row"><span class="fsl">Solar Wind Speed (vw):</span><span class="fsv" id="cme-vw">--</span></div>
           <div class="fs-row"><span class="fsl">Transit Drag (Cd):</span><span class="fsv">1.00 × 10⁻⁷ km⁻¹</span></div>
+          <div class="fs-row"><span class="fsl">CME Source Location:</span><span class="fsv" id="cme-loc">--</span></div>
+          <div class="fs-row"><span class="fsl">DONKI Event ID:</span><span class="fsv" id="cme-id">--</span></div>
           <div class="fs-row"><span class="fsl">Estimated Arrival (ToA):</span><span class="fsv" id="cme-toa">--</span></div>
           <div class="fs-row"><span class="fsl">Time Remaining:</span><span class="fsv" id="cme-countdown">--</span></div>
           <div class="fs-row"><span class="fsl">Earth Impact Risk:</span><span class="fsv" id="cme-prob">0.0%</span></div>
@@ -421,6 +431,142 @@
     </div>
   </div>
 
+  <!-- TAB: SEP Risk Engine -->
+  <div class="tab-panel" id="tab-sep">
+    <div class="sep-layout">
+      <!-- Left: SEP Canvas -->
+      <div class="glass">
+        <div class="card-hdr">
+          <span class="clbl">🌩 SOLAR ENERGETIC PARTICLE (SEP) EVENT RISK ENGINE</span>
+          <span class="chip" id="sep-status" style="background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.3);color:var(--green)">● NO SEP RISK</span>
+        </div>
+        <div class="chart-wrap h260" style="position:relative;background:#020206;border-radius:6px;border:1px solid var(--brd)">
+          <canvas id="sepCanvas"></canvas>
+        </div>
+        <p class="shap-note">↑ Parker Spiral field-line connectivity model. SEP risk is computed from X-ray spectral hardness, flare heliographic longitude, and magnetic foot-point connection probability to Earth's L1 environment. Feature not present in standard Aditya-L1 data pipeline.</p>
+      </div>
+      <!-- Center: SEP Metrics -->
+      <div class="glass">
+        <div class="card-hdr"><span class="clbl">⚡ SEP FLUX & RISK ASSESSMENT</span></div>
+        <div class="fore-stats">
+          <div class="fs-row"><span class="fsl">Estimated >10 MeV Proton Flux:</span><span class="fsv" id="sep-flux">-- pfu</span></div>
+          <div class="fs-row"><span class="fsl">Estimated >100 MeV Proton Flux:</span><span class="fsv" id="sep-flux100">-- pfu</span></div>
+          <div class="fs-row"><span class="fsl">Parker Spiral Connection (W angle):</span><span class="fsv" id="sep-wangle">-- °W</span></div>
+          <div class="fs-row"><span class="fsl">Flare-to-L1 Field-Line Prob (P_conn):</span><span class="fsv" id="sep-pconn">--%</span></div>
+          <div class="fs-row"><span class="fsl">X-ray Spectral Hardness (HR):</span><span class="fsv" id="sep-hr">--</span></div>
+          <div class="fs-row"><span class="fsl">SEP Onset Lead Time:</span><span class="fsv" id="sep-lead">-- min</span></div>
+          <div class="fs-row"><span class="fsl">GOES S-scale Risk:</span><span class="fsv" id="sep-scale" style="font-weight:700">S0 None</span></div>
+        </div>
+        <div class="fore-warning" id="sep-warning" style="display:none;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:6px;font-size:0.68rem;color:var(--red);line-height:1.5">
+          ⚠ SEP EVENT IMMINENT: High-energy proton flux rising. Radio burst detected as precursor. Radiation hazard for EVA crewed missions. NAVIC/GPS degradation expected. Polar HF blackout risk HIGH.
+        </div>
+        <div class="sep-innovation-note" style="margin-top:0.75rem;padding:0.5rem 0.6rem;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:5px;font-size:0.62rem;color:#a78bfa;line-height:1.45">
+          <b style="color:#c4b5fd">🔬 Scientific Innovation:</b> Real-time SEP flux prediction from Aditya-L1 SoLEXS X-ray data using empirical Tylka-Dietrich regression + Parker Spiral connectivity model. Aditya-L1's HEL1OS hard X-ray spectral index (γ) directly correlates with particle acceleration efficiency (δ = γ + 2 via stochastic acceleration theory). This feature is not present in any current Aditya-L1 ground segment tool.
+        </div>
+        <div class="sep-calibration-section" style="margin-top:0.75rem;padding:0.5rem;background:rgba(255,255,255,0.02);border:1px solid var(--brd);border-radius:5px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span style="font-size:0.65rem;color:#94a3b8">⚙ Model Calibration:</span>
+          <button class="cbtn primary" id="calibration-upload-btn" style="padding:4px 8px;font-size:0.6rem;cursor:pointer">📂 UPLOAD CSV</button>
+          <input type="file" id="calibration-file" accept=".csv" style="display:none">
+        </div>
+      </div>
+      <!-- Right: Proton Flux Time Series -->
+      <div class="glass">
+        <div class="card-hdr"><span class="clbl">📈 ESTIMATED PROTON FLUX HISTORY</span></div>
+        <div class="chart-wrap h160"><canvas id="sepChart"></canvas></div>
+        <div class="card-hdr" style="border-top:1px solid var(--brd);margin-top:0.5rem;padding-top:0.5rem"><span class="clbl">📊 GOES 1-8 Å X-RAY OBSERVATION (REAL-TIME)</span></div>
+        <div class="chart-wrap h100"><canvas id="goes-xray-chart"></canvas></div>
+        <div class="qpp-info" style="margin-top:0.5rem">
+          <div class="qpp-row"><span class="qlbl">Acceleration Spectral Index (δ):</span><span class="qval" id="sep-delta">--</span></div>
+          <div class="qpp-row"><span class="qlbl">Plasma Shock Speed Est.:</span><span class="qval" id="sep-vshock">-- km/s</span></div>
+          <div class="qpp-row"><span class="qlbl">CME-driven Shock Coupling:</span><span class="qval" id="sep-shock-coupling">--</span></div>
+          <div class="qpp-row"><span class="qlbl">Diffusion Mean Free Path (λ):</span><span class="qval" id="sep-mfp">-- AU</span></div>
+        </div>
+        <div class="card-hdr" style="border-top:1px solid var(--brd);margin-top:0.5rem;padding-top:0.5rem"><span class="clbl">🤖 AI SHAP EXPLAINABILITY (RISK FACTORS)</span></div>
+        <div class="shap-container" style="margin-top:0.5rem;display:flex;flex-direction:column;gap:6px;font-size:0.68rem">
+          <div class="shap-bar-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span style="width:130px;color:#94a3b8">Magnetic Conn. (P_conn):</span>
+            <div style="flex-grow:1;background:rgba(255,255,255,0.05);height:8px;border-radius:4px;overflow:hidden;position:relative">
+              <div id="shap-pconn-bar" style="background:#ef4444;height:100%;width:0%;transition:width 0.3s ease"></div>
+            </div>
+            <span id="shap-pconn-val" style="width:45px;text-align:right;font-family:monospace;color:#ef4444">+0.00</span>
+          </div>
+          <div class="shap-bar-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span style="width:130px;color:#94a3b8">X-ray Flux (SoLEXS):</span>
+            <div style="flex-grow:1;background:rgba(255,255,255,0.05);height:8px;border-radius:4px;overflow:hidden;position:relative">
+              <div id="shap-solexs-bar" style="background:#f97316;height:100%;width:0%;transition:width 0.3s ease"></div>
+            </div>
+            <span id="shap-solexs-val" style="width:45px;text-align:right;font-family:monospace;color:#f97316">+0.00</span>
+          </div>
+          <div class="shap-bar-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span style="width:130px;color:#94a3b8">Spectral Hardness (HR):</span>
+            <div style="flex-grow:1;background:rgba(255,255,255,0.05);height:8px;border-radius:4px;overflow:hidden;position:relative">
+              <div id="shap-hr-bar" style="background:#eab308;height:100%;width:0%;transition:width 0.3s ease"></div>
+            </div>
+            <span id="shap-hr-val" style="width:45px;text-align:right;font-family:monospace;color:#eab308">+0.00</span>
+          </div>
+          <div class="shap-bar-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span style="width:130px;color:#94a3b8">Geomagnetic Bz:</span>
+            <div style="flex-grow:1;background:rgba(255,255,255,0.05);height:8px;border-radius:4px;overflow:hidden;position:relative">
+              <div id="shap-bz-bar" style="background:#06b6d4;height:100%;width:0%;transition:width 0.3s ease"></div>
+            </div>
+            <span id="shap-bz-val" style="width:45px;text-align:right;font-family:monospace;color:#06b6d4">+0.00</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: SUIT NUV Chromospheric Evaporation Engine -->
+  <div class="tab-panel" id="tab-suit">
+    <div class="sep-layout">
+      <!-- Left: NUV Solar Disk Simulation -->
+      <div class="glass">
+        <div class="card-hdr">
+          <span class="clbl">🔭 SUIT NUV (200–400nm) — CHROMOSPHERIC FLARE KERNEL MONITOR</span>
+          <span class="chip" id="suit-status" style="background:rgba(168,85,247,0.1);border-color:rgba(168,85,247,0.35);color:#c4b5fd">● SUIT MONITORING</span>
+        </div>
+        <div class="chart-wrap h260" style="position:relative;background:#020206;border-radius:6px;border:1px solid var(--brd)">
+          <canvas id="suitCanvas"></canvas>
+        </div>
+        <p class="shap-note">↑ Simulated SUIT NUV full-disk view (200–400nm). Purple/UV brightening indicates chromospheric flare kernels — energy deposition from reconnection-accelerated electrons hitting the lower solar atmosphere. <b style="color:#c4b5fd">Based on ISRO's ApJL 2025 discovery</b>: first-ever NUV flare kernel image (X6.3 class, Feb 22 2024).</p>
+      </div>
+      <!-- Center: Evaporation Physics -->
+      <div class="glass">
+        <div class="card-hdr"><span class="clbl">⚡ CHROMOSPHERIC EVAPORATION DIAGNOSTICS</span></div>
+        <div class="fore-stats">
+          <div class="fs-row"><span class="fsl">NUV Brightness Index (Ii):</span><span class="fsv" id="suit-nuv">-- DN/s</span></div>
+          <div class="fs-row"><span class="fsl">NUV→SoLEXS Delay (Δt):</span><span class="fsv" id="suit-delay">-- s</span></div>
+          <div class="fs-row"><span class="fsl">Evaporation Velocity (v_evap):</span><span class="fsv" id="suit-vevap" style="color:var(--cyan)">-- km/s</span></div>
+          <div class="fs-row"><span class="fsl">Coronal Loop Fill Time:</span><span class="fsv" id="suit-filltime">-- s</span></div>
+          <div class="fs-row"><span class="fsl">Chromospheric Scale Height (H):</span><span class="fsv">~2000 km (standard)</span></div>
+          <div class="fs-row"><span class="fsl">Evaporation Mode:</span><span class="fsv" id="suit-evapmode">--</span></div>
+          <div class="fs-row"><span class="fsl">Neupert Coherence (dF/dt ∝ HXR):</span><span class="fsv" id="suit-neupert">--%</span></div>
+        </div>
+        <div class="fore-warning" id="suit-evap-warning" style="display:none;background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.35);border-radius:6px;font-size:0.68rem;color:#c4b5fd;line-height:1.5">
+          ⚡ EXPLOSIVE EVAPORATION: v_evap > 300 km/s. Blueshifted emission expected in Ca XIX / Fe XXV. Hot plasma driving upflow into coronal loops. SoLEXS soft X-ray rise will follow in ~30–120 seconds.
+        </div>
+        <div style="margin-top:0.75rem;padding:0.5rem 0.6rem;background:rgba(168,85,247,0.05);border:1px solid rgba(168,85,247,0.18);border-radius:5px;font-size:0.62rem;color:#a78bfa;line-height:1.45">
+          <b style="color:#c4b5fd">🔬 ISRO Discovery (ApJL 2025):</b> SUIT NUV images of X6.3 flare on Feb 22, 2024 revealed chromospheric kernels directly linked to coronal plasma heating — the first such observation from L1 orbit. Our engine models this NUV→X-ray coupling in real-time using the Neupert Effect time-derivative.
+        </div>
+      </div>
+      <!-- Right: Flare Energy Budget -->
+      <div class="glass">
+        <div class="card-hdr"><span class="clbl">⚡ FLARE ENERGY BUDGET CALCULATOR</span></div>
+        <div class="fore-stats">
+          <div class="fs-row"><span class="fsl">Estimated Ribbon Area (A_r):</span><span class="fsv" id="suit-ribbon">-- Mm²</span></div>
+          <div class="fs-row"><span class="fsl">Free Magnetic Energy (E_free):</span><span class="fsv" id="suit-emag">-- erg</span></div>
+          <div class="fs-row"><span class="fsl">Radiated Energy (E_rad):</span><span class="fsv" id="suit-erad">-- erg</span></div>
+          <div class="fs-row"><span class="fsl">Kinetic Energy (E_kin):</span><span class="fsv" id="suit-ekin">-- erg</span></div>
+          <div class="fs-row"><span class="fsl">Eruptive vs. Confined:</span><span class="fsv" id="suit-class" style="font-weight:700">--</span></div>
+          <div class="fs-row"><span class="fsl">Post-Flare Cooling τ_cool:</span><span class="fsv" id="suit-cool">-- min</span></div>
+          <div class="fs-row"><span class="fsl">Time to Quiet Corona:</span><span class="fsv" id="suit-quiet">--</span></div>
+        </div>
+        <div class="chart-wrap h120" style="margin-top:0.5rem"><canvas id="suitEnergyChart"></canvas></div>
+        <p class="shap-note" style="font-size:0.6rem;margin-top:0.3rem">E_free = B²/(8π) × A_r × L | τ_cool = 3nkT/(n²Λ(T)) | Λ(T) = CHIANTI cooling function</p>
+      </div>
+    </div>
+  </div>
+
   <!-- TAB: AI Chatbot -->
   <div class="tab-panel" id="tab-chat">
     <div class="chat-layout glass">
@@ -452,6 +598,7 @@
 
 </div><!-- /btm-section -->
 
+<script src="sepEngine.js"></script>
 <script src="dashboard.js"></script>
 </body>
 </html>

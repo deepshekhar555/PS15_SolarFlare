@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  ingest:
+    build:
+      context: .
+      dockerfile: data_ingest/Dockerfile
+    image: solarsentinels-ingest:latest
+    container_name: solarsentinels-ingest-container
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    image: solarsentinels-dashboard:latest
+    container_name: solarsentinels-dashboard-container
+    ports:
+      - "8000:80"
+    restart: unless-stopped
+    depends_on:
+      - ingest

@@ -4,9 +4,13 @@
 
 * **Project Title**: Autonomous Space Weather Alert System: Real-Time Solar Flare Nowcasting and Forecasting Using ISRO Aditya-L1 X-Ray Telemetry
 * **Theme**: Space Weather, Machine Learning, and Satellite Telemetry Processing
-* **Team Name**: SolarSentinels
+* **Team Name**: SuryaDrishti (formerly SolarSentinels)
 * **Institutional Affiliation**: Adamas University, Kolkata
-* **Team Members**: Deep (Team Lead & Tech Lead), Mahalaxmi (Data & Validation), Ashfaque (Data & Validation)
+* **Team Members**:
+  * **Deep Shekhar Halder** (Team Lead & Tech Lead) - `deephalder209@gmail.com`
+  * **Rituraj Saha** (Feature Engineering & Visualization) - `saharituraj805@gmail.com`
+  * **Mahalaxmi Macha** (Data & Validation) - `mahalaxmimacha14@gmail.com`
+  * **Ashfaque Ahamed Khan** (Dashboard & Benchmarking) - `ashfaqueahamedkhan591@gmail.com`
 
 ---
 

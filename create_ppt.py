@@ -86,7 +86,7 @@ def create_presentation():
     p_sub.space_after = Pt(30)
     
     p_team = tf.add_paragraph()
-    p_team.text = "Team: SolarSentinels | Institution: Adamas University, Kolkata"
+    p_team.text = "Team: SuryaDrishti | Institution: Adamas University, Kolkata"
     p_team.font.name = 'Arial'
     p_team.font.size = Pt(16)
     p_team.font.color.rgb = WHITE
@@ -126,7 +126,7 @@ def create_presentation():
     tf_r.word_wrap = True
     
     p_rh = tf_r.paragraphs[0]
-    p_rh.text = "The SolarSentinels Solution"
+    p_rh.text = "The SuryaDrishti Solution"
     p_rh.font.name = 'Arial'
     p_rh.font.size = Pt(22)
     p_rh.font.bold = True
@@ -559,7 +559,7 @@ def create_presentation():
     tf9.word_wrap = True
     
     p_th = tf9.paragraphs[0]
-    p_th.text = "Team: SolarSentinels"
+    p_th.text = "Team: SuryaDrishti"
     p_th.font.name = 'Arial'
     p_th.font.size = Pt(22)
     p_th.font.bold = True
@@ -568,6 +568,7 @@ def create_presentation():
     
     members = [
         ("Deep Shekhar Halder (Lead)", "Algorithm design, data pipeline integration, and machine learning modeling."),
+        ("Rituraj Saha", "Feature engineering, telemetry calibration, and scientific visualization."),
         ("Mahalaxmi Macha", "Telemetry preprocessing, metadata alignment, and nowcasting validation."),
         ("Ashfaque Ahamed Khan", "Cross-catalog benchmarking, NOAA GOES validation, and dashboard deployment.")
     ]

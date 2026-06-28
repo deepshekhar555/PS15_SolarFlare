@@ -1,0 +1,31 @@
+FROM nginx:alpine
+
+# Copy HTML, JS, CSS, and engine
+COPY dashboard.html /usr/share/nginx/html/index.html
+COPY dashboard.html /usr/share/nginx/html/dashboard.html
+COPY dashboard.css /usr/share/nginx/html/dashboard.css
+COPY dashboard.js /usr/share/nginx/html/dashboard.js
+COPY sepEngine.js /usr/share/nginx/html/sepEngine.js
+
+# Copy images and assets
+COPY sun_orange.png /usr/share/nginx/html/sun_orange.png
+COPY sun_purple.png /usr/share/nginx/html/sun_purple.png
+COPY sun_yellow.png /usr/share/nginx/html/sun_yellow.png
+
+# Copy SUIT UV image assets
+COPY suit_214.png /usr/share/nginx/html/suit_214.png
+COPY suit_276.png /usr/share/nginx/html/suit_276.png
+COPY suit_279.png /usr/share/nginx/html/suit_279.png
+COPY suit_300.png /usr/share/nginx/html/suit_300.png
+COPY suit_388.png /usr/share/nginx/html/suit_388.png
+COPY suit_396.png /usr/share/nginx/html/suit_396.png
+COPY suit_green_textured.png /usr/share/nginx/html/suit_green_textured.png
+COPY suit_purple_smooth.png /usr/share/nginx/html/suit_purple_smooth.png
+COPY suit_red_smooth.png /usr/share/nginx/html/suit_red_smooth.png
+COPY suit_red_white_textured.png /usr/share/nginx/html/suit_red_white_textured.png
+COPY suit_violet_textured.png /usr/share/nginx/html/suit_violet_textured.png
+COPY suit_yellow_labeled.png /usr/share/nginx/html/suit_yellow_labeled.png
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
