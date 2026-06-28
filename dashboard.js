@@ -21,7 +21,7 @@ const AI = {
 let TELEMETRY = [];
 let idx = 0, playing = true, speed = 2, tickId = null;
 let flareI = 0, flareAR = 0;
-let wavelength = '279';
+let wavelength = '304';
 let showBlackout = true, showOrbits = false;
 let notifGranted = false;
 let demoMode = false;
@@ -394,12 +394,12 @@ function buildGranules() {
 resizeSun();
 window.addEventListener('resize', resizeSun);
 
-// Wavelength color profiles (Tuned to SUIT band observations)
+// Wavelength color profiles
 const WL_PROFILES = {
- '279': { c0:'rgba(255,200,100,1)', c1:'rgba(255,120,20,1)', c2:'rgba(220,80,10,1)', c3:'rgba(160,40,5,1)', c4:'rgba(70,10,2,1)', granCol:'255,180,50', arCol:'255,220,150', coronaCol:'255,110,0' },
- '396': { c0:'rgba(255,255,220,1)', c1:'rgba(255,210,60,1)', c2:'rgba(230,170,15,1)', c3:'rgba(170,110,5,1)', c4:'rgba(80,45,2,1)', granCol:'255,220,100', arCol:'255,255,200', coronaCol:'255,190,0' },
- '300': { c0:'rgba(200,245,255,1)', c1:'rgba(80,210,255,1)', c2:'rgba(30,150,230,1)', c3:'rgba(15,80,180,1)', c4:'rgba(5,20,90,1)', granCol:'100,200,255', arCol:'200,240,255', coronaCol:'0,160,255' },
- '214': { c0:'rgba(220,220,220,1)', c1:'rgba(150,150,150,1)', c2:'rgba(90,90,90,1)', c3:'rgba(50,50,50,1)', c4:'rgba(20,20,20,1)', granCol:'160,160,160', arCol:'220,220,220', coronaCol:'140,140,140' }
+ '304': { c0:'rgba(255,255,210,1)', c1:'rgba(255,200,50,1)', c2:'rgba(255,130,15,1)', c3:'rgba(190,60,8,1)', c4:'rgba(80,12,4,1)', granCol:'255,210,65', arCol:'255,230,100', coronaCol:'255,100,0' },
+ '171': { c0:'rgba(180,220,255,1)', c1:'rgba(80,170,255,1)', c2:'rgba(30,100,255,1)', c3:'rgba(15,50,180,1)', c4:'rgba(5,10,60,1)', granCol:'100,180,255', arCol:'200,230,255', coronaCol:'0,150,255' },
+ '193': { c0:'rgba(200,255,200,1)', c1:'rgba(80,220,100,1)', c2:'rgba(20,180,60,1)', c3:'rgba(5,100,30,1)', c4:'rgba(2,30,8,1)', granCol:'100,220,120', arCol:'180,255,200', coronaCol:'0,200,80' },
+ 'hmi': { c0:'rgba(40,40,50,1)', c1:'rgba(25,25,35,1)', c2:'rgba(15,15,20,1)', c3:'rgba(8,8,12,1)', c4:'rgba(3,3,5,1)', granCol:'60,60,80', arCol:'200,200,220', coronaCol:'80,80,100' }
 };
 
 // --- Solar Disk Shading Helper ---
@@ -412,7 +412,7 @@ function drawSun(ts) {
 
  const w=sunCanvas.width, h=sunCanvas.height;
  const cx=w/2, cy=h/2, R=Math.min(cx,cy)*0.85;
- const WL = WL_PROFILES[wavelength] || WL_PROFILES['279'];
+ const WL = WL_PROFILES[wavelength] || WL_PROFILES['304'];
 
  sunCtx.clearRect(0,0,w,h);
  sunCtx.fillStyle = wavelength==='hmi'?'#080810':'#020205';
@@ -441,7 +441,7 @@ function drawSun(ts) {
  }
  sunCtx.drawImage(window.starCanvas, 0, 0, w, h);
  // Outer corona glow
- if (wavelength !== '214') {
+ if (wavelength !== 'hmi') {
   const ca = 0.14+flareI*0.22;
   const og = sunCtx.createRadialGradient(cx,cy,R*0.9,cx,cy,R*1.5);
   og.addColorStop(0,`rgba(${WL.coronaCol},${ca})`);
@@ -457,7 +457,7 @@ function drawSun(ts) {
 
  // Solar disk gradient
  const dg = sunCtx.createRadialGradient(cx-R*0.15,cy-R*0.15,0,cx,cy,R);
- if (flareI>0.4 && wavelength==='279') {
+ if (flareI>0.4 && wavelength==='304') {
   dg.addColorStop(0,'rgba(255,255,255,1)');
   dg.addColorStop(0.2,'rgba(255,240,180,1)');
   dg.addColorStop(0.55,'rgba(255,140,30,1)');
@@ -470,32 +470,44 @@ function drawSun(ts) {
  }
  sunCtx.fillStyle=dg; sunCtx.fillRect(0,0,w,h);
 
- // --- 3D Rotating Solar Sphere (Local SUIT Instrument Images) ---
+ // --- 3D Rotating Solar Sphere (Local Real-Eye Images) ---
  if (!window.LOCAL_SUN_IMGS) {
   window.LOCAL_SUN_IMGS = {
-   '279': new Image(),
-   '396': new Image(),
-   '300': new Image(),
-   '214': new Image()
+   '304': new Image(),
+   '171': new Image(),
+   '193': new Image(),
+   'hmi': new Image()
   };
-  window.LOCAL_SUN_IMGS['279'].src = 'suit_279.png';
-  window.LOCAL_SUN_IMGS['396'].src = 'suit_396.png';
-  window.LOCAL_SUN_IMGS['300'].src = 'suit_300.png';
-  window.LOCAL_SUN_IMGS['214'].src = 'suit_214.png';
+  window.LOCAL_SUN_IMGS['304'].src = 'sun_orange.png';
+  window.LOCAL_SUN_IMGS['171'].src = 'sun_yellow.png';
+  window.LOCAL_SUN_IMGS['193'].src = 'sun_purple.png';
+  window.LOCAL_SUN_IMGS['hmi'].src = 'sun_yellow.png';
  }
 
  const localImg = window.LOCAL_SUN_IMGS[wavelength];
  let drawSuccess = false;
  
  if (localImg && localImg.complete && localImg.naturalWidth > 0) {
-  // 214nm (NB1) is photospheric grey, so we draw it source-over. Others are UV/chromospheric, screen blending.
-  sunCtx.globalCompositeOperation = wavelength === '214' ? 'source-over' : 'screen';
-  sunCtx.globalAlpha = wavelength === '214' ? 0.85 : 0.98;
+  sunCtx.globalCompositeOperation = wavelength === 'hmi' ? 'source-over' : 'screen';
+  sunCtx.globalAlpha = wavelength === 'hmi' ? 0.85 : 0.98;
   
-  // Draw the high-resolution solar photography centered
+  // 1. Draw the high-resolution base solar photography centered (stable base)
   sunCtx.drawImage(localImg, cx - R * 1.02, cy - R * 1.02, R * 2.04, R * 2.04);
   
-  // Apply a spherical 3D lens gradient (limb darkening) to create a perfect 3D volume
+  // 2. Draw a sliding atmospheric texture layer (masked to the solar disk) to simulate 3D rotation
+  sunCtx.save();
+  sunCtx.beginPath(); sunCtx.arc(cx, cy, R * 0.96, 0, Math.PI * 2); sunCtx.clip();
+  
+  // Translate the texture horizontally based on time
+  const shiftX = (sunTime * 6.5) % (R * 2);
+  sunCtx.globalAlpha = wavelength === 'hmi' ? 0.22 : 0.35; // overlay opacity for surface flow
+  sunCtx.drawImage(localImg, cx - R - shiftX, cy - R, R * 2, R * 2);
+  sunCtx.drawImage(localImg, cx - R - shiftX + R * 2, cy - R, R * 2, R * 2);
+  
+  sunCtx.restore();
+  sunCtx.globalAlpha = wavelength === 'hmi' ? 0.85 : 0.98;
+  
+  // 3. Apply a spherical 3D lens gradient (limb darkening) to create a perfect 3D volume
   const lens = sunCtx.createRadialGradient(cx - R * 0.15, cy - R * 0.15, R * 0.2, cx, cy, R);
   lens.addColorStop(0, 'rgba(0,0,0,0)');
   lens.addColorStop(0.5, 'rgba(0,0,0,0.05)');
@@ -515,11 +527,10 @@ function drawSun(ts) {
  let realImg = null;
  if (!drawSuccess) {
   if (!window.SDO_IMGS) {
-   window.SDO_IMGS = { '279': new Image(), '396': new Image(), '300': new Image(), '214': new Image(), 'hmi': new Image() };
-   window.SDO_IMGS['279'].crossOrigin = "Anonymous"; window.SDO_IMGS['279'].src = 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0304.jpg';
-   window.SDO_IMGS['396'].crossOrigin = "Anonymous"; window.SDO_IMGS['396'].src = 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_HMIB.jpg';
-   window.SDO_IMGS['300'].crossOrigin = "Anonymous"; window.SDO_IMGS['300'].src = 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0171.jpg';
-   window.SDO_IMGS['214'].crossOrigin = "Anonymous"; window.SDO_IMGS['214'].src = 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0193.jpg';
+   window.SDO_IMGS = { '304': new Image(), '171': new Image(), '193': new Image(), 'hmi': new Image() };
+   window.SDO_IMGS['304'].crossOrigin = "Anonymous"; window.SDO_IMGS['304'].src = 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0304.jpg';
+   window.SDO_IMGS['171'].crossOrigin = "Anonymous"; window.SDO_IMGS['171'].src = 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0171.jpg';
+   window.SDO_IMGS['193'].crossOrigin = "Anonymous"; window.SDO_IMGS['193'].src = 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0193.jpg';
    window.SDO_IMGS['hmi'].crossOrigin = "Anonymous"; window.SDO_IMGS['hmi'].src = 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_HMIB.jpg';
   }
   
@@ -580,7 +591,7 @@ function drawSun(ts) {
  }
  
  // --- Dynamic Magnetic Flux Loops on Sun Face ---
- if (wavelength !== '214') {
+ if (wavelength !== 'hmi') {
   const numLoops = 4 + Math.floor(flareI * 8);
   for (let i = 0; i < numLoops; i++) {
    const angle = (i * 1.8) + sunTime * 0.04;
@@ -775,14 +786,9 @@ requestAnimationFrame(drawSun);
 
 function setWavelength(wl) {
  wavelength=wl;
- ['279','396','300','214'].forEach(w=>{ const b=document.getElementById('wl-'+w); if(b){ b.className='wlbtn'+(w===wl?' active':''); } });
+ ['304','171','193','hmi'].forEach(w=>{ const b=document.getElementById('wl-'+w); if(b){ b.className='wlbtn'+(w===wl?' active':''); } });
  const modeEl=document.getElementById('solar-mode');
- const modes={
-  '279':'SUIT 279nm (Mg II k - Chromosphere)',
-  '396':'SUIT 396nm (Ca II h - Photosphere)',
-  '300':'SUIT 300nm (NB6 - Upper Photosphere)',
-  '214':'SUIT 214nm (NB1 - Middle Photosphere)'
- };
+ const modes={'304':'AIA 304Å (Chromosphere)','171':'AIA 171Å (Corona)','193':'AIA 193Å (Plasma)','hmi':'HMI Magnetogram'};
  if(modeEl) modeEl.textContent=modes[wl]||wl;
 }
 
