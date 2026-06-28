@@ -28,9 +28,8 @@ let demoMode = false;
 let historicalFlare = null;
 let recentSolexs = [];
 let recentHel1os = [];
-const WIN = 60; // window size for SHAP/QPP
+const WIN = 60;
 
-// ────────── AUDIO SYNTH MODULE (Web Audio API) ──────────
 const AudioSynth = {
  ctx: null,
  master: null,
@@ -41,9 +40,12 @@ const AudioSynth = {
  windNoise: null,
  windGain: null,
  windFilter: null,
- alarmOsc: null,
+ crackleInterval: null,
+ alarmOsc1: null,
+ alarmOsc2: null,
  alarmGain: null,
  alarmInterval: null,
+ currentAlarmLevel: null,
  muted: true,
 
  init() {
@@ -57,6 +59,7 @@ const AudioSynth = {
 
    this.startSpaceHum();
    this.startSolarWindNoise();
+   this.startSolarCrackle();
   } catch (e) {
    console.warn("Web Audio API not supported", e);
   }
@@ -87,7 +90,7 @@ const AudioSynth = {
   this.humOsc2.frequency.value = 55.4;
 
   this.humGain = this.ctx.createGain();
-  this.humGain.gain.value = 0.18;
+  this.humGain.gain.value = 0.15;
 
   this.humOsc1.connect(this.humFilter);
   this.humOsc2.connect(this.humFilter);
@@ -100,7 +103,7 @@ const AudioSynth = {
   const mod = () => {
    if (!this.ctx || this.muted) return;
    const t = this.ctx.currentTime;
-   this.humFilter.frequency.setTargetAtTime(70 + 40 * Math.sin(t * 0.2), t, 0.5);
+   this.humFilter.frequency.setTargetAtTime(70 + 30 * Math.sin(t * 0.2), t, 0.5);
   };
   setInterval(mod, 1000);
  },
@@ -120,10 +123,10 @@ const AudioSynth = {
   this.windFilter = this.ctx.createBiquadFilter();
   this.windFilter.type = 'bandpass';
   this.windFilter.frequency.value = 200;
-  this.windFilter.Q.value = 1.0;
+  this.windFilter.Q.value = 1.2;
 
   this.windGain = this.ctx.createGain();
-  this.windGain.gain.value = 0.05;
+  this.windGain.gain.value = 0.04;
 
   this.windNoise.connect(this.windFilter);
   this.windFilter.connect(this.windGain);
@@ -131,13 +134,59 @@ const AudioSynth = {
   this.windNoise.start();
  },
 
- updateSolarWind(speedKmS) {
+ startSolarCrackle() {
+  this.crackleInterval = setInterval(() => {
+   if (!this.ctx || this.muted || !window.lastSolexsValue) return;
+   
+   const flux = window.lastSolexsValue + (window.lastHel1osValue || 0);
+   if (flux < 50) return;
+   
+   const prob = Math.min(0.85, 0.05 + (flux / 2000) * 0.8);
+   if (Math.random() > prob) return;
+   
+   const t = this.ctx.currentTime;
+   const osc = this.ctx.createOscillator();
+   const filter = this.ctx.createBiquadFilter();
+   const gain = this.ctx.createGain();
+   
+   filter.type = 'highpass';
+   filter.frequency.value = 3000;
+   
+   osc.type = 'triangle';
+   osc.frequency.setValueAtTime(100 + Math.random() * 8000, t);
+   
+   const vol = Math.min(0.12, 0.01 + (flux / 2000) * 0.11);
+   gain.gain.setValueAtTime(vol, t);
+   gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.015);
+   
+   osc.connect(filter);
+   filter.connect(gain);
+   gain.connect(this.master);
+   
+   osc.start(t);
+   osc.stop(t + 0.02);
+  }, 40);
+ },
+
+ updateSpaceWeather(solexs, hel1os, windSpeed) {
+  window.lastSolexsValue = solexs;
+  window.lastHel1osValue = hel1os;
+
   if (!this.ctx || this.muted) return;
   const t = this.ctx.currentTime;
-  const freq = 120 + ((speedKmS - 400) / 400) * 350;
-  const gain = 0.03 + ((speedKmS - 400) / 400) * 0.07;
-  this.windFilter.frequency.setTargetAtTime(freq, t, 0.2);
-  this.windGain.gain.setTargetAtTime(gain, t, 0.2);
+  
+  const windFreq = 150 + ((windSpeed - 400) / 400) * 300;
+  const windVolume = 0.02 + ((windSpeed - 400) / 400) * 0.06;
+  this.windFilter.frequency.setTargetAtTime(windFreq, t, 0.3);
+  this.windGain.gain.setTargetAtTime(windVolume, t, 0.3);
+
+  const totalFlux = solexs + hel1os;
+  const humFreqBase = 55 + Math.min(55, (totalFlux / 1500) * 40);
+  this.humOsc1.frequency.setTargetAtTime(humFreqBase, t, 0.5);
+  this.humOsc2.frequency.setTargetAtTime(humFreqBase * 1.008, t, 0.5);
+  
+  const humVolume = 0.12 + Math.min(0.18, (totalFlux / 1500) * 0.15);
+  this.humGain.gain.setTargetAtTime(humVolume, t, 0.5);
  },
 
  playScanBeep(hardnessRatio) {
@@ -150,7 +199,7 @@ const AudioSynth = {
   const pitch = 600 + Math.min(1.0, hardnessRatio) * 1800;
   osc.frequency.setValueAtTime(pitch, t);
 
-  gainNode.gain.setValueAtTime(0.04, t);
+  gainNode.gain.setValueAtTime(0.03, t);
   gainNode.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
 
   osc.connect(gainNode);
@@ -169,7 +218,7 @@ const AudioSynth = {
   osc.frequency.setValueAtTime(150, t);
   osc.frequency.exponentialRampToValueAtTime(40, t + 0.05);
 
-  gainNode.gain.setValueAtTime(0.08, t);
+  gainNode.gain.setValueAtTime(0.06, t);
   gainNode.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
 
   osc.connect(gainNode);
@@ -178,39 +227,76 @@ const AudioSynth = {
   osc.stop(t + 0.07);
  },
 
- startAlarm() {
-  if (!this.ctx || this.alarmInterval) return;
+ startAlarm(level) {
+  if (this.currentAlarmLevel === level) return;
+  this.stopAlarm();
+  this.currentAlarmLevel = level;
+
+  if (!this.ctx) return;
   const t = this.ctx.currentTime;
 
   this.alarmGain = this.ctx.createGain();
   this.alarmGain.gain.value = 0;
   this.alarmGain.connect(this.master);
 
-  this.alarmOsc = this.ctx.createOscillator();
-  this.alarmOsc.type = 'square'; // Harsh klaxon sound
-  this.alarmOsc.frequency.setValueAtTime(600, t);
-  
-  this.alarmOsc2 = this.ctx.createOscillator();
-  this.alarmOsc2.type = 'sawtooth';
-  this.alarmOsc2.frequency.setValueAtTime(610, t); // Dissonance for urgency
+  if (level === 'high') {
+   this.alarmOsc1 = this.ctx.createOscillator();
+   this.alarmOsc1.type = 'square';
+   this.alarmOsc1.frequency.setValueAtTime(440, t);
 
-  this.alarmOsc.connect(this.alarmGain);
-  this.alarmOsc2.connect(this.alarmGain);
-  this.alarmOsc.start(t);
-  this.alarmOsc2.start(t);
+   this.alarmOsc2 = this.ctx.createOscillator();
+   this.alarmOsc2.type = 'sawtooth';
+   this.alarmOsc2.frequency.setValueAtTime(445, t);
 
-  this.alarmInterval = setInterval(() => {
-   if (!this.ctx || this.muted) return;
-   const now = this.ctx.currentTime;
-   // Authentic Klaxon Dive
-   this.alarmOsc.frequency.setValueAtTime(750, now);
-   this.alarmOsc.frequency.exponentialRampToValueAtTime(350, now + 0.4);
-   this.alarmOsc2.frequency.setValueAtTime(760, now);
-   this.alarmOsc2.frequency.exponentialRampToValueAtTime(360, now + 0.4);
+   this.alarmOsc1.connect(this.alarmGain);
+   this.alarmOsc2.connect(this.alarmGain);
+   this.alarmOsc1.start(t);
+   this.alarmOsc2.start(t);
 
-   this.alarmGain.gain.setValueAtTime(0.25, now);
-   this.alarmGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
-  }, 500);
+   this.alarmInterval = setInterval(() => {
+    if (!this.ctx || this.muted) return;
+    const now = this.ctx.currentTime;
+    
+    this.alarmOsc1.frequency.setValueAtTime(450, now);
+    this.alarmOsc1.frequency.exponentialRampToValueAtTime(855, now + 0.38);
+    this.alarmOsc2.frequency.setValueAtTime(455, now);
+    this.alarmOsc2.frequency.exponentialRampToValueAtTime(860, now + 0.38);
+
+    this.alarmGain.gain.setValueAtTime(0.22, now);
+    this.alarmGain.gain.exponentialRampToValueAtTime(0.001, now + 0.44);
+    
+    const beepOsc = this.ctx.createOscillator();
+    const beepGain = this.ctx.createGain();
+    beepOsc.type = 'sine';
+    beepOsc.frequency.setValueAtTime(1600, now);
+    beepGain.gain.setValueAtTime(0.06, now);
+    beepGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    
+    beepOsc.connect(beepGain);
+    beepGain.connect(this.master);
+    beepOsc.start(now);
+    beepOsc.stop(now + 0.15);
+   }, 500);
+
+  } else if (level === 'med') {
+   this.alarmOsc1 = this.ctx.createOscillator();
+   this.alarmOsc1.type = 'sine';
+   this.alarmOsc1.frequency.setValueAtTime(880, t);
+
+   this.alarmOsc1.connect(this.alarmGain);
+   this.alarmOsc1.start(t);
+
+   this.alarmInterval = setInterval(() => {
+    if (!this.ctx || this.muted) return;
+    const now = this.ctx.currentTime;
+    
+    this.alarmGain.gain.setValueAtTime(0.18, now);
+    this.alarmGain.gain.setValueAtTime(0, now + 0.08);
+    
+    this.alarmGain.gain.setValueAtTime(0.18, now + 0.18);
+    this.alarmGain.gain.setValueAtTime(0, now + 0.26);
+   }, 1500);
+  }
  },
 
  stopAlarm() {
@@ -218,15 +304,19 @@ const AudioSynth = {
    clearInterval(this.alarmInterval);
    this.alarmInterval = null;
   }
-  if (this.alarmOsc) {
-   try { this.alarmOsc.stop(); this.alarmOsc2.stop(); } catch(e){}
-   this.alarmOsc = null;
+  if (this.alarmOsc1) {
+   try { this.alarmOsc1.stop(); } catch(e){}
+   this.alarmOsc1 = null;
+  }
+  if (this.alarmOsc2) {
+   try { this.alarmOsc2.stop(); } catch(e){}
    this.alarmOsc2 = null;
   }
   if (this.alarmGain) {
    this.alarmGain.disconnect();
    this.alarmGain = null;
   }
+  this.currentAlarmLevel = null;
  }
 };
 
@@ -1415,7 +1505,7 @@ function updateDashboard(solexs,hel1os) {
   if(t)t.textContent=new Date().toLocaleTimeString().slice(0,5);
   if(c){c.textContent='M'+(Math.floor(pm/12)+1);c.style.color='#f97316';}
   notifFired=false; checkNotification('high');
-  AudioSynth.startAlarm();
+  AudioSynth.startAlarm('high');
  } else if(solexs>400){
   pm=Math.min(65,35+(solexs-400)*0.05); px=Math.min(25,5+(solexs-400)*0.025);
   pC=Math.min(80,55); pB=88; ac='med';
@@ -1423,7 +1513,7 @@ function updateDashboard(solexs,hel1os) {
   setText('al-icon','⚡'); setText('al-level','MODERATE');
   setText('al-sub','PRE-FLARE THERMAL HEATING');
   setText('al-desc','Gradual thermal soft X-ray rise. Pre-flare heating in AR4085. Monitor closely.');
-  AudioSynth.stopAlarm();
+  AudioSynth.startAlarm('med');
  } else {
   pm=Math.max(1.5,solexs*0.08); px=Math.max(0.3,solexs*0.015);
   pC=Math.max(5,solexs*0.4); pB=Math.max(15,solexs*1.2);
@@ -1455,7 +1545,7 @@ function updateDashboard(solexs,hel1os) {
  const t=Date.now()/1000;
  const wspd = Math.round(452+30*Math.sin(t*0.05));
  setText('wind-spd',wspd+' km/s');
- AudioSynth.updateSolarWind(wspd);
+ AudioSynth.updateSpaceWeather(solexs, hel1os, wspd);
  setText('wind-bz',(-3.2+1.5*Math.sin(t*0.08)).toFixed(1));
  setText('wind-den',(6.1+1.2*Math.sin(t*0.04)).toFixed(1)+'/cm³');
  const geo=document.getElementById('geo-imp');
