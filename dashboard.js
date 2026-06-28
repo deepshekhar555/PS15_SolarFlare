@@ -546,30 +546,57 @@ function drawSun(ts) {
   }
  }
 
- // --- Coronal Edge Prominences (Realism) ---
+ // --- Coronal Edge Prominences (Dynamic Real-Time Flare Eruption) ---
  sunCtx.globalCompositeOperation = 'screen';
- for (let p = 0; p < 30; p++) {
-  const pAng = (p / 30) * Math.PI * 2 + sunTime * 0.05;
-  const pHeight = R * (0.05 + 0.08 * Math.sin(p * 7 + sunTime * 2));
+ for (let p = 0; p < 45; p++) {
+  const pAng = (p / 45) * Math.PI * 2 + sunTime * 0.03;
+  
+  // Base prominence height + dynamic flare ejection scaling with live flareI (SoLEXS/HEL1OS flux)
+  const baseH = R * (0.03 + 0.05 * Math.sin(p * 11 + sunTime * 1.5));
+  const flareH = R * flareI * 0.35 * Math.max(0, Math.sin(p * 5 + sunTime * 4.5) - 0.2);
+  const pHeight = baseH + flareH;
+  
   const bx = cx + Math.cos(pAng) * R;
   const by = cy + Math.sin(pAng) * R;
   
   sunCtx.beginPath();
   sunCtx.moveTo(bx, by);
   sunCtx.quadraticCurveTo(
-   cx + Math.cos(pAng + 0.05) * (R + pHeight), 
-   cy + Math.sin(pAng + 0.05) * (R + pHeight), 
-   cx + Math.cos(pAng + 0.1) * R, 
-   cy + Math.sin(pAng + 0.1) * R
+   cx + Math.cos(pAng + 0.04) * (R + pHeight), 
+   cy + Math.sin(pAng + 0.04) * (R + pHeight), 
+   cx + Math.cos(pAng + 0.08) * R, 
+   cy + Math.sin(pAng + 0.08) * R
   );
   
-  const pa = 0.3 + 0.4 * Math.sin(sunTime * 3 + p);
-  sunCtx.strokeStyle = `rgba(255, 100, 20, ${pa})`;
-  sunCtx.lineWidth = 1.5;
+  const pa = (0.25 + 0.35 * Math.sin(sunTime * 2.5 + p)) * (1.0 + flareI * 1.5);
+  // Transition from deep orange to bright white-hot plasma during intense flares
+  const rVal = Math.round(255);
+  const gVal = Math.round(100 + flareI * 155);
+  const bVal = Math.round(20 + flareI * 235);
+  
+  sunCtx.strokeStyle = `rgba(${rVal}, ${gVal}, ${bVal}, ${pa})`;
+  sunCtx.lineWidth = 1.2 + flareI * 6.5;
   sunCtx.stroke();
  }
+ 
+ // --- Dynamic Magnetic Flux Loops on Sun Face ---
+ if (wavelength !== '214') {
+  const numLoops = 4 + Math.floor(flareI * 8);
+  for (let i = 0; i < numLoops; i++) {
+   const angle = (i * 1.8) + sunTime * 0.04;
+   const rx = cx + Math.cos(angle) * R * 0.45 * Math.sin(sunTime * 0.12 + i);
+   const ry = cy + Math.sin(angle) * R * 0.45 * Math.cos(sunTime * 0.08 + i);
+   const loopR = R * (0.08 + 0.22 * flareI) * (0.8 + 0.2 * Math.sin(sunTime * 2.2 + i));
+   
+   sunCtx.beginPath();
+   sunCtx.arc(rx, ry, loopR, 0, Math.PI, true);
+   sunCtx.strokeStyle = `rgba(${WL.arCol}, ${(0.08 + 0.52 * flareI) * (0.4 + 0.6 * Math.sin(sunTime * 3.5 + i))})`;
+   sunCtx.lineWidth = 1.0 + flareI * 3.5;
+   sunCtx.stroke();
+  }
+ }
  sunCtx.globalCompositeOperation = 'source-over';
-
+ 
  // Active Regions (Glowing Halos around Craters/Anomalies)
  for (let ai=0; ai<ARs.length; ai++) {
   const ar=ARs[ai];
