@@ -402,47 +402,8 @@ const WL_PROFILES = {
  'hmi': { c0:'rgba(40,40,50,1)', c1:'rgba(25,25,35,1)', c2:'rgba(15,15,20,1)', c3:'rgba(8,8,12,1)', c4:'rgba(3,3,5,1)', granCol:'60,60,80', arCol:'200,200,220', coronaCol:'80,80,100' }
 };
 
-// --- 3D Spherical Projection Drawing ---
-function draw3DSphere(img, cx, cy, R, rot) {
- const N = 50; // Number of vertical slices for high-fidelity rendering
- const W_tex = img.naturalWidth;
- const H_tex = img.naturalHeight;
- if (!W_tex || !H_tex) return;
-
- for (let i = 0; i < N; i++) {
-  const t1 = -Math.PI / 2 + (i / N) * Math.PI;
-  const t2 = -Math.PI / 2 + ((i + 1) / N) * Math.PI;
-
-  // Map angles to texture horizontal coordinates (wrapping with rotation)
-  let sx1 = (((t1 + rot + Math.PI/2) / Math.PI) * W_tex) % W_tex;
-  let sx2 = (((t2 + rot + Math.PI/2) / Math.PI) * W_tex) % W_tex;
-  if (sx1 < 0) sx1 += W_tex;
-  if (sx2 < 0) sx2 += W_tex;
-
-  // Screen horizontal coordinates
-  const dx1 = cx + R * Math.sin(t1);
-  const dx2 = cx + R * Math.sin(t2);
-  const dw = dx2 - dx1;
-
-  // Screen vertical coordinates (scaling height to create spherical curvature)
-  const cosVal = Math.cos((t1 + t2) / 2);
-  const dh = 2 * R * cosVal;
-  const dy = cy - R * cosVal;
-
-  // Draw the slice
-  if (sx2 > sx1) {
-   sunCtx.drawImage(img, sx1, 0, sx2 - sx1, H_tex, dx1, dy, dw, dh);
-  } else {
-   // Handle wrapping at the texture edge boundary
-   const w1 = W_tex - sx1;
-   const w2 = sx2;
-   const dw1 = dw * (w1 / (w1 + w2));
-   const dw2 = dw * (w2 / (w1 + w2));
-   sunCtx.drawImage(img, sx1, 0, w1, H_tex, dx1, dy, dw1, dh);
-   sunCtx.drawImage(img, 0, 0, w2, H_tex, dx1 + dw1, dy, dw2, dh);
-  }
- }
-}
+// --- Solar Disk Shading Helper ---
+// Keeps the high-resolution solar photography centered and applies a 3D spherical lens shading.
 
 function drawSun(ts) {
  requestAnimationFrame(drawSun);
@@ -527,13 +488,22 @@ function drawSun(ts) {
  let drawSuccess = false;
  
  if (localImg && localImg.complete && localImg.naturalWidth > 0) {
-  // Compute smooth rotation over time
-  const rot = (sunTime * 0.1) % (2 * Math.PI);
-  
   sunCtx.globalCompositeOperation = wavelength === 'hmi' ? 'source-over' : 'screen';
-  sunCtx.globalAlpha = wavelength === 'hmi' ? 0.8 : 0.96;
+  sunCtx.globalAlpha = wavelength === 'hmi' ? 0.85 : 0.98;
   
-  draw3DSphere(localImg, cx, cy, R * 1.01, rot);
+  // Draw the high-resolution solar photography centered
+  sunCtx.drawImage(localImg, cx - R * 1.02, cy - R * 1.02, R * 2.04, R * 2.04);
+  
+  // Apply a spherical 3D lens gradient (limb darkening) to create a perfect 3D volume
+  const lens = sunCtx.createRadialGradient(cx - R * 0.15, cy - R * 0.15, R * 0.2, cx, cy, R);
+  lens.addColorStop(0, 'rgba(0,0,0,0)');
+  lens.addColorStop(0.5, 'rgba(0,0,0,0.05)');
+  lens.addColorStop(0.8, 'rgba(0,0,0,0.45)');
+  lens.addColorStop(1, 'rgba(0,0,0,0.92)');
+  
+  sunCtx.globalCompositeOperation = 'multiply';
+  sunCtx.beginPath(); sunCtx.arc(cx, cy, R * 1.02, 0, Math.PI * 2);
+  sunCtx.fillStyle = lens; sunCtx.fill();
   
   sunCtx.globalAlpha = 1.0;
   sunCtx.globalCompositeOperation = 'source-over';
@@ -541,6 +511,7 @@ function drawSun(ts) {
  }
 
  // --- Fallback to SDO Satellite Feed (if local images aren't loaded) ---
+ let realImg = null;
  if (!drawSuccess) {
   if (!window.SDO_IMGS) {
    window.SDO_IMGS = { '304': new Image(), '171': new Image(), '193': new Image(), 'hmi': new Image() };
@@ -550,7 +521,7 @@ function drawSun(ts) {
    window.SDO_IMGS['hmi'].crossOrigin = "Anonymous"; window.SDO_IMGS['hmi'].src = 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_HMIB.jpg';
   }
   
-  const realImg = window.SDO_IMGS[wavelength];
+  realImg = window.SDO_IMGS[wavelength];
   if (realImg && realImg.complete && realImg.naturalWidth > 0) {
    sunCtx.globalCompositeOperation = wavelength === 'hmi' ? 'source-over' : 'screen';
    sunCtx.globalAlpha = wavelength === 'hmi' ? 0.7 : 0.95;
