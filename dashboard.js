@@ -994,6 +994,70 @@ function drawWorldMap(ts) {
   mapCtx.font=`${Math.round(W*0.014)}px JetBrains Mono, monospace`;
   mapCtx.fillText(s.name,sx+r+2,sy+3);
  }
+
+ // 🛰 ADITYA-L1 VANTAGE POINT & BORESIGHT FOCUS LINE
+ const now = new Date();
+ const solarLon = -((now.getUTCHours() + now.getUTCMinutes()/60 + now.getUTCSeconds()/3600) / 24) * 360 + 180;
+ const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+ const solarLat = 23.44 * Math.sin((2 * Math.PI / 365) * (dayOfYear - 80));
+ const [subX, subY] = lonLatToXY(solarLon, solarLat, W, H);
+
+ // Aditya-L1 Position on the HUD (placed in top-left as off-planet anchor)
+ const l1x = W * 0.08, l1y = H * 0.12;
+
+ // 1. Animated radiation beam from L1 to Earth sub-solar focus point
+ mapCtx.strokeStyle = 'rgba(234,179,8,0.3)';
+ mapCtx.lineWidth = 1.5;
+ mapCtx.setLineDash([6, 4]);
+ mapCtx.lineDashOffset = -mapTime * 15;
+ mapCtx.beginPath();
+ mapCtx.moveTo(l1x, l1y);
+ mapCtx.lineTo(subX, subY);
+ mapCtx.stroke();
+ mapCtx.setLineDash([]);
+
+ // 2. Glow ring at sub-solar target
+ mapCtx.strokeStyle = 'rgba(234,179,8,0.6)';
+ mapCtx.lineWidth = 1;
+ mapCtx.beginPath();
+ mapCtx.arc(subX, subY, 8 + 4 * Math.sin(mapTime * 6), 0, Math.PI * 2);
+ mapCtx.stroke();
+
+ // 3. Aditya-L1 icon/dot in top-left
+ const pulseR = 5 + 2 * Math.sin(mapTime * 4);
+ const l1Glow = mapCtx.createRadialGradient(l1x, l1y, 0, l1x, l1y, pulseR * 2);
+ l1Glow.addColorStop(0, 'rgba(6,182,212,0.4)');
+ l1Glow.addColorStop(1, 'rgba(6,182,212,0)');
+ mapCtx.fillStyle = l1Glow;
+ mapCtx.beginPath(); mapCtx.arc(l1x, l1y, pulseR * 2, 0, Math.PI*2); mapCtx.fill();
+
+ mapCtx.fillStyle = '#06b6d4';
+ mapCtx.beginPath(); mapCtx.arc(l1x, l1y, 4, 0, Math.PI*2); mapCtx.fill();
+
+ mapCtx.fillStyle = '#ffffff';
+ mapCtx.font = `bold ${Math.round(W * 0.015)}px Inter, sans-serif`;
+ mapCtx.fillText('🛰 Aditya-L1', l1x + 8, l1y - 2);
+ mapCtx.fillStyle = 'rgba(255,255,255,0.5)';
+ mapCtx.font = `${Math.round(W * 0.012)}px JetBrains Mono, monospace`;
+ mapCtx.fillText('L1 HALO ORBIT (1.5M km)', l1x + 8, l1y + 8);
+
+ // 4. Telemetry Focus HUD in top-right
+ const hudX = W * 0.64, hudY = H * 0.08;
+ mapCtx.fillStyle = 'rgba(10,22,40,0.7)';
+ mapCtx.strokeStyle = 'rgba(6,182,212,0.3)';
+ mapCtx.lineWidth = 1;
+ mapCtx.fillRect(hudX, hudY, W * 0.33, H * 0.16);
+ mapCtx.strokeRect(hudX, hudY, W * 0.33, H * 0.16);
+
+ mapCtx.fillStyle = '#06b6d4';
+ mapCtx.font = `bold ${Math.round(W * 0.012)}px Inter, sans-serif`;
+ mapCtx.fillText('🛰 ADITYA-L1 TELEMETRY FOCUS', hudX + 8, hudY + 12);
+
+ mapCtx.fillStyle = 'rgba(255,255,255,0.7)';
+ mapCtx.font = `${Math.round(W * 0.011)}px JetBrains Mono, monospace`;
+ mapCtx.fillText(`Focus: Lat ${solarLat.toFixed(1)}°, Lon ${solarLon.toFixed(1)}°`, hudX + 8, hudY + 24);
+ mapCtx.fillText(`Boresight: SoLEXS & HEL1OS Aligned`, hudX + 8, hudY + 34);
+ mapCtx.fillText(`Telemetry: LOCK ACTIVE (1s cadence)`, hudX + 8, hudY + 44);
 }
 requestAnimationFrame(drawWorldMap);
 
