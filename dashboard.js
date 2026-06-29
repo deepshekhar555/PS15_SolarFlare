@@ -815,7 +815,7 @@ const mapCtx = mapCanvas.getContext('2d');
 let mapTime = 0, mapLastTs = 0;
 const MAP_MS = 1000/5;
 
-// Simplified continent outlines [lon, lat]
+// Detailed continent outlines [lon, lat]
 const CONTINENTS = [
  // North America
  [[-168,72],[-120,72],[-90,70],[-78,72],[-65,70],[-55,47],[-67,44],[-70,42],[-74,38],[-76,35],[-80,25],[-87,15],[-83,9],[-77,8],[-90,16],[-104,19],[-109,23],[-110,32],[-117,32],[-120,34],[-124,37],[-124,47],[-125,52],[-138,59],[-152,59],[-163,61],[-168,65]],
@@ -873,193 +873,290 @@ window.addEventListener('resize',resizeMap);
 
 function drawWorldMap(ts) {
  requestAnimationFrame(drawWorldMap);
- if (ts-mapLastTs<MAP_MS) return;
- mapLastTs=ts; mapTime+=0.06;
+ if (ts - mapLastTs < MAP_MS) return;
+ mapLastTs = ts; mapTime += 0.06;
 
- const W=mapCanvas.width, H=mapCanvas.height;
- mapCtx.clearRect(0,0,W,H);
+ const W = mapCanvas.width, H = mapCanvas.height;
+ mapCtx.clearRect(0, 0, W, H);
 
- // Ocean
- const oG=mapCtx.createLinearGradient(0,0,0,H);
- oG.addColorStop(0,'#0a1628'); oG.addColorStop(1,'#0d1e32');
- mapCtx.fillStyle=oG; mapCtx.fillRect(0,0,W,H);
+ // === 1. DEEP-OCEAN BACKGROUND (NASA Blue Marble style) ===
+ const oceanGrad = mapCtx.createLinearGradient(0, 0, 0, H);
+ oceanGrad.addColorStop(0,   '#04111f');
+ oceanGrad.addColorStop(0.2, '#061828');
+ oceanGrad.addColorStop(0.5, '#071e30');
+ oceanGrad.addColorStop(0.8, '#061625');
+ oceanGrad.addColorStop(1,   '#030e1a');
+ mapCtx.fillStyle = oceanGrad;
+ mapCtx.fillRect(0, 0, W, H);
 
- // Grid lines
- mapCtx.strokeStyle='rgba(255,255,255,0.05)'; mapCtx.lineWidth=0.5;
- for (let lon=-180;lon<=180;lon+=30) {
-  const [x]=lonLatToXY(lon,0,W,H);
-  mapCtx.beginPath(); mapCtx.moveTo(x,0); mapCtx.lineTo(x,H); mapCtx.stroke();
+ // === 2. SUB-OCEAN DEPTH SHADING (makes ocean feel 3D) ===
+ const depthGrad = mapCtx.createRadialGradient(W*0.5, H*0.5, 0, W*0.5, H*0.5, W*0.55);
+ depthGrad.addColorStop(0,   'rgba(6,40,80,0.35)');
+ depthGrad.addColorStop(0.6, 'rgba(3,18,40,0.2)');
+ depthGrad.addColorStop(1,   'rgba(0,0,0,0)');
+ mapCtx.fillStyle = depthGrad;
+ mapCtx.fillRect(0, 0, W, H);
+
+ // === 3. GRATICULE (fine lat/lon grid) ===
+ mapCtx.save();
+ mapCtx.strokeStyle = 'rgba(100,160,220,0.06)';
+ mapCtx.lineWidth = 0.5;
+ for (let lon = -180; lon <= 180; lon += 10) {
+  const [x] = lonLatToXY(lon, 0, W, H);
+  mapCtx.beginPath(); mapCtx.moveTo(x, 0); mapCtx.lineTo(x, H); mapCtx.stroke();
  }
- for (let lat=-90;lat<=90;lat+=30) {
-  const [,y]=lonLatToXY(0,lat,W,H);
-  mapCtx.beginPath(); mapCtx.moveTo(0,y); mapCtx.lineTo(W,y); mapCtx.stroke();
+ for (let lat = -90; lat <= 90; lat += 10) {
+  const [, y] = lonLatToXY(0, lat, W, H);
+  mapCtx.beginPath(); mapCtx.moveTo(0, y); mapCtx.lineTo(W, y); mapCtx.stroke();
  }
- // Equator
- mapCtx.strokeStyle='rgba(255,255,255,0.1)'; mapCtx.lineWidth=1;
- mapCtx.beginPath(); mapCtx.moveTo(0,H/2); mapCtx.lineTo(W,H/2); mapCtx.stroke();
+ // Major lines brighter
+ mapCtx.strokeStyle = 'rgba(100,160,220,0.14)';
+ mapCtx.lineWidth = 0.7;
+ for (const lon of [-120, -60, 0, 60, 120]) {
+  const [x] = lonLatToXY(lon, 0, W, H);
+  mapCtx.beginPath(); mapCtx.moveTo(x, 0); mapCtx.lineTo(x, H); mapCtx.stroke();
+ }
+ for (const lat of [-60, -30, 0, 30, 60]) {
+  const [, y] = lonLatToXY(0, lat, W, H);
+  mapCtx.beginPath(); mapCtx.moveTo(0, y); mapCtx.lineTo(W, y); mapCtx.stroke();
+ }
+ // Equator highlight
+ mapCtx.strokeStyle = 'rgba(100,200,255,0.22)';
+ mapCtx.lineWidth = 1;
+ const [, eqY] = lonLatToXY(0, 0, W, H);
+ mapCtx.beginPath(); mapCtx.moveTo(0, eqY); mapCtx.lineTo(W, eqY); mapCtx.stroke();
+ mapCtx.restore();
 
- // Continents
- mapCtx.fillStyle='#1a3322'; mapCtx.strokeStyle='rgba(50,200,100,0.25)'; mapCtx.lineWidth=0.8;
+ // === 4. CONTINENTS (multi-layer terrain shading) ===
  for (const cont of CONTINENTS) {
-  mapCtx.beginPath();
-  const [x0,y0]=lonLatToXY(cont[0][0],cont[0][1],W,H);
-  mapCtx.moveTo(x0,y0);
-  for (let i=1;i<cont.length;i++) {
-   const [x,y]=lonLatToXY(cont[i][0],cont[i][1],W,H);
-   mapCtx.lineTo(x,y);
+  const path = new Path2D();
+  const [x0, y0] = lonLatToXY(cont[0][0], cont[0][1], W, H);
+  path.moveTo(x0, y0);
+  for (let i = 1; i < cont.length; i++) {
+   const [x, y] = lonLatToXY(cont[i][0], cont[i][1], W, H);
+   path.lineTo(x, y);
   }
-  mapCtx.closePath(); mapCtx.fill(); mapCtx.stroke();
+  path.closePath();
+
+  // Base land colour — deep teal-grey like NASA satellite imagery
+  mapCtx.fillStyle = '#152c1e';
+  mapCtx.fill(path);
+
+  // Interior terrain highlight (simulates green forest/vegetation)
+  mapCtx.save();
+  mapCtx.clip(path);
+  const terrainGrad = mapCtx.createLinearGradient(0, 0, W * 0.3, H);
+  terrainGrad.addColorStop(0,   'rgba(30,65,40,0.55)');
+  terrainGrad.addColorStop(0.4, 'rgba(22,50,30,0.4)');
+  terrainGrad.addColorStop(1,   'rgba(12,30,18,0.3)');
+  mapCtx.fillStyle = terrainGrad;
+  mapCtx.fillRect(0, 0, W, H);
+  mapCtx.restore();
+
+  // Coastline glow
+  mapCtx.strokeStyle = 'rgba(56,200,120,0.28)';
+  mapCtx.lineWidth = 0.9;
+  mapCtx.stroke(path);
+  // Inner coast edge
+  mapCtx.strokeStyle = 'rgba(80,220,140,0.12)';
+  mapCtx.lineWidth = 2.5;
+  mapCtx.stroke(path);
  }
 
- // Ionospheric Blackout (dayside) — dynamically calculated from live SoLEXS & HEL1OS telemetry
+ // === 5. NIGHT / DAY TERMINATOR (based on real UTC time) ===
+ const now = new Date();
+ const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+ const solarLon = -((utcH / 24) * 360 - 180);
+ const doy = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+ const solarDecl = 23.44 * Math.sin((2 * Math.PI / 365) * (doy - 80));
+
+ // Night side overlay (dark blue tint over terminator)
+ const nightX = lonLatToXY(solarLon - 90, 0, W, H)[0];
+ const nightGrad = mapCtx.createLinearGradient(nightX - W * 0.15, 0, nightX + W * 0.15, 0);
+ nightGrad.addColorStop(0,    'rgba(0,5,20,0.55)');
+ nightGrad.addColorStop(0.35, 'rgba(0,5,20,0.38)');
+ nightGrad.addColorStop(0.5,  'rgba(0,0,0,0)');
+ nightGrad.addColorStop(1,    'rgba(0,0,0,0)');
+ mapCtx.fillStyle = nightGrad;
+ mapCtx.fillRect(0, 0, W, H);
+
+ // Terminator label (tiny)
+ const termX = lonLatToXY(solarLon - 90, 0, W, H)[0];
+ mapCtx.fillStyle = 'rgba(120,160,220,0.5)';
+ mapCtx.font = `${Math.round(W * 0.01)}px Inter, sans-serif`;
+ mapCtx.save(); mapCtx.translate(termX, H * 0.1); mapCtx.rotate(-Math.PI / 2);
+ mapCtx.fillText('TERMINATOR', 0, 0);
+ mapCtx.restore();
+
+ // === 6. IONOSPHERIC BLACKOUT ===
  const activeSolexs = window.lastSolexsValue || 10;
  const activeHel1os = window.lastHel1osValue || 10;
- const dbAbsorption = Math.max(0, Math.log10(activeSolexs) * 12 + Math.log10(activeHel1os) * 4 - 20); // physical dB estimation
- const absorptionRatio = Math.min(1.0, dbAbsorption / 30); // scale to 0-1
- 
+ const dbAbsorption = Math.max(0, Math.log10(activeSolexs) * 12 + Math.log10(activeHel1os) * 4 - 20);
+ const absorptionRatio = Math.min(1.0, dbAbsorption / 30);
+ const [subX, subY] = lonLatToXY(solarLon, solarDecl, W, H);
+
  if (showBlackout && absorptionRatio > 0.05) {
-  const now = new Date();
-  
-  // 1. Dynamic Sub-Solar Longitude based on UTC time
-  const solarLon = -((now.getUTCHours() + now.getUTCMinutes()/60 + now.getUTCSeconds()/3600) / 24) * 360 + 180;
-  
-  // 2. Dynamic Sub-Solar Latitude (declination) based on day of year (seasonal drift)
-  const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
-  const solarLat = 23.44 * Math.sin((2 * Math.PI / 365) * (dayOfYear - 80));
-  
-  const [subX, subY] = lonLatToXY(solarLon, solarLat, W, H);
-  
-  // 3. Size and opacity scale dynamically with live SoLEXS & HEL1OS flux
-  const span = W * 0.65 * absorptionRatio;
+  const span = W * 0.55 * absorptionRatio;
   const bo = mapCtx.createRadialGradient(subX, subY, 0, subX, subY, span);
-  const opacity = 0.65 * absorptionRatio;
-  
-  bo.addColorStop(0, `rgba(239, 68, 68, ${opacity})`);       // Red core (strong absorption)
-  bo.addColorStop(0.35, `rgba(249, 115, 22, ${opacity * 0.6})`); // Orange middle (moderate)
-  bo.addColorStop(0.7, `rgba(234, 179, 8, ${opacity * 0.25})`);  // Yellow edge (weak)
-  bo.addColorStop(1, 'rgba(0,0,0,0)');
-  
-  mapCtx.beginPath(); 
-  mapCtx.ellipse(subX, subY, span, H * 0.65 * absorptionRatio, 0, 0, Math.PI * 2);
-  mapCtx.fillStyle = bo; 
-  mapCtx.fill();
+  const op = 0.55 * absorptionRatio;
+  bo.addColorStop(0,    `rgba(255,60,0,${op})`);
+  bo.addColorStop(0.3,  `rgba(255,120,0,${op * 0.65})`);
+  bo.addColorStop(0.65, `rgba(255,200,0,${op * 0.25})`);
+  bo.addColorStop(1,    'rgba(0,0,0,0)');
+  mapCtx.beginPath();
+  mapCtx.ellipse(subX, subY, span, H * 0.58 * absorptionRatio, 0, 0, Math.PI * 2);
+  mapCtx.fillStyle = bo; mapCtx.fill();
 
-  // Blackout label
-  mapCtx.fillStyle = `rgba(255, 80, 0, ${0.8 * absorptionRatio})`;
-  mapCtx.font = `bold ${Math.round(W * 0.016)}px JetBrains Mono, monospace`;
+  // Small inline label (near the effect, not overlapping satellites)
+  mapCtx.fillStyle = `rgba(255,100,0,${0.9 * absorptionRatio})`;
+  mapCtx.font = `bold ${Math.round(W * 0.013)}px JetBrains Mono, monospace`;
   mapCtx.textAlign = 'center';
-  mapCtx.fillText(`HF BLACKOUT: -${dbAbsorption.toFixed(1)} dB (D-REGION IONIZATION)`, subX, subY - 15);
+  mapCtx.fillText(`D-LAYER: -${dbAbsorption.toFixed(1)} dB`, subX, subY + H * 0.08);
   mapCtx.textAlign = 'left';
- };
+ }
 
- // Satellite orbits
+ // === 7. SATELLITE ORBITS ===
  if (showOrbits) {
-  mapCtx.strokeStyle='rgba(255,255,255,0.06)'; mapCtx.lineWidth=0.5;
   for (const s of SATS_DEF) {
-   if (s.lonSpd===0) continue; // skip GEO
-   mapCtx.setLineDash([3,4]);
+   if (s.lonSpd === 0) continue;
+   mapCtx.strokeStyle = `${s.color}28`;
+   mapCtx.lineWidth = 0.7;
+   mapCtx.setLineDash([4, 5]);
    mapCtx.beginPath();
-   for (let t2=0; t2<120; t2++) {
-    const p=getSatPos({...s,baseLon:s.baseLon+s.lonSpd*t2*0.5},mapTime-mapTime);
-    const adjLon=p.lon;
-    const [x,y]=lonLatToXY(adjLon,p.lat,W,H);
-    if (t2===0) mapCtx.moveTo(x,y); else mapCtx.lineTo(x,y);
+   for (let t2 = 0; t2 < 200; t2++) {
+    const frac = t2 / 200;
+    const lon2 = ((s.baseLon + s.lonSpd * t2 * 0.5 + (satPhases[s.id] || 0) * 30) % 360);
+    const adjLon = lon2 > 180 ? lon2 - 360 : lon2;
+    const lat2 = s.baseLat * Math.cos(frac * Math.PI * 2 + (satPhases[s.id] || 0));
+    const [x, y] = lonLatToXY(adjLon, lat2, W, H);
+    t2 === 0 ? mapCtx.moveTo(x, y) : mapCtx.lineTo(x, y);
    }
    mapCtx.stroke();
    mapCtx.setLineDash([]);
   }
  }
 
- // Satellites
- const alertC=lastAlertClass||'low';
+ // === 8. SATELLITES ===
+ const alertC = lastAlertClass || 'low';
+ const fontSize = Math.max(9, Math.round(W * 0.012));
+ mapCtx.font = `${fontSize}px JetBrains Mono, monospace`;
+
  for (const s of SATS_DEF) {
-  const pos=getSatPos(s, mapTime);
-  const [sx,sy]=lonLatToXY(pos.lon,pos.lat,W,H);
-  const r=alertC==='high'?4.5:alertC==='med'?4:3.5;
-  const alpha=alertC==='high'?(0.7+0.3*Math.sin(mapTime*5)):1;
+  const pos = getSatPos(s, mapTime);
+  const [sx, sy] = lonLatToXY(pos.lon, pos.lat, W, H);
+  const r = alertC === 'high' ? 4 : alertC === 'med' ? 3.5 : 3;
+  const pulse = alertC === 'high' ? (0.65 + 0.35 * Math.sin(mapTime * 6)) : 1;
 
-  // Glow
-  const sg=mapCtx.createRadialGradient(sx,sy,0,sx,sy,r*2.5);
-  const rc=alertC==='high'?'239,68,68':alertC==='med'?'245,158,11':'16,185,129';
-  sg.addColorStop(0,`rgba(${rc},0.4)`); sg.addColorStop(1,`rgba(${rc},0)`);
-  mapCtx.beginPath(); mapCtx.arc(sx,sy,r*2.5,0,Math.PI*2); mapCtx.fillStyle=sg; mapCtx.fill();
+  // Outer glow ring
+  const rc = alertC === 'high' ? '239,68,68' : alertC === 'med' ? '245,158,11' : '16,185,129';
+  const glow = mapCtx.createRadialGradient(sx, sy, 0, sx, sy, r * 3.5);
+  glow.addColorStop(0, `rgba(${rc},${0.35 * pulse})`);
+  glow.addColorStop(1, `rgba(${rc},0)`);
+  mapCtx.beginPath(); mapCtx.arc(sx, sy, r * 3.5, 0, Math.PI * 2);
+  mapCtx.fillStyle = glow; mapCtx.fill();
 
-  // Dot
-  mapCtx.beginPath(); mapCtx.arc(sx,sy,r,0,Math.PI*2);
-  mapCtx.fillStyle=alertC==='high'?`rgba(239,68,68,${alpha})`:alertC==='med'?`rgba(245,158,11,${alpha})`:s.color;
+  // Core dot
+  mapCtx.beginPath(); mapCtx.arc(sx, sy, r, 0, Math.PI * 2);
+  mapCtx.fillStyle = alertC === 'high' ? `rgba(239,68,68,${pulse})` :
+                     alertC === 'med'  ? `rgba(245,158,11,${pulse})` : s.color;
   mapCtx.fill();
+  mapCtx.strokeStyle = 'rgba(255,255,255,0.4)';
+  mapCtx.lineWidth = 0.5;
+  mapCtx.stroke();
 
-  // Label
-  mapCtx.fillStyle='rgba(255,255,255,0.75)';
-  mapCtx.font=`${Math.round(W*0.014)}px JetBrains Mono, monospace`;
-  mapCtx.fillText(s.name,sx+r+2,sy+3);
+  // Label with dark background pill (prevents overlap clutter)
+  const label = s.name;
+  const tw = mapCtx.measureText(label).width;
+  const lx = sx + r + 3, ly = sy + fontSize * 0.35;
+  mapCtx.fillStyle = 'rgba(5,12,25,0.72)';
+  mapCtx.fillRect(lx - 1, ly - fontSize + 1, tw + 4, fontSize + 2);
+  mapCtx.fillStyle = 'rgba(220,235,255,0.85)';
+  mapCtx.fillText(label, lx, ly);
  }
 
- // 🛰 ADITYA-L1 VANTAGE POINT & BORESIGHT FOCUS LINE
- const now = new Date();
- const solarLon = -((now.getUTCHours() + now.getUTCMinutes()/60 + now.getUTCSeconds()/3600) / 24) * 360 + 180;
- const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
- const solarLat = 23.44 * Math.sin((2 * Math.PI / 365) * (dayOfYear - 80));
- const [subX, subY] = lonLatToXY(solarLon, solarLat, W, H);
+ // === 9. ADITYA-L1 BORESIGHT INDICATOR (left strip — no overlap) ===
+ // Aditya-L1 pin anchored to the LEFT edge of the canvas
+ const l1x = 14, l1y = H * 0.5;
 
- // Aditya-L1 Position on the HUD (placed in top-left as off-planet anchor)
- const l1x = W * 0.08, l1y = H * 0.12;
+ // Pulsing cyan halo
+ const pulseR = 6 + 3 * Math.sin(mapTime * 4);
+ const l1Halo = mapCtx.createRadialGradient(l1x, l1y, 0, l1x, l1y, pulseR * 2);
+ l1Halo.addColorStop(0, 'rgba(6,182,212,0.5)');
+ l1Halo.addColorStop(1, 'rgba(6,182,212,0)');
+ mapCtx.beginPath(); mapCtx.arc(l1x, l1y, pulseR * 2, 0, Math.PI * 2);
+ mapCtx.fillStyle = l1Halo; mapCtx.fill();
 
- // 1. Animated radiation beam from L1 to Earth sub-solar focus point
- mapCtx.strokeStyle = 'rgba(234,179,8,0.3)';
- mapCtx.lineWidth = 1.5;
- mapCtx.setLineDash([6, 4]);
- mapCtx.lineDashOffset = -mapTime * 15;
+ mapCtx.beginPath(); mapCtx.arc(l1x, l1y, 5, 0, Math.PI * 2);
+ mapCtx.fillStyle = '#06b6d4'; mapCtx.fill();
+ mapCtx.strokeStyle = '#67e8f9'; mapCtx.lineWidth = 1.2;
+ mapCtx.stroke();
+
+ // Vertical label alongside left edge
+ mapCtx.save();
+ mapCtx.fillStyle = '#67e8f9';
+ mapCtx.font = `bold ${Math.round(W * 0.013)}px Inter, sans-serif`;
+ mapCtx.translate(l1x + 10, l1y);
+ mapCtx.fillText('🛰 Aditya-L1 (L1)', 0, -5);
+ mapCtx.fillStyle = 'rgba(100,220,255,0.55)';
+ mapCtx.font = `${Math.round(W * 0.011)}px JetBrains Mono, monospace`;
+ mapCtx.fillText('Boresight → Sun', 0, 8);
+ mapCtx.restore();
+
+ // Animated dashed beam from L1 edge-pin to sub-solar point
+ mapCtx.save();
+ mapCtx.strokeStyle = 'rgba(234,179,8,0.45)';
+ mapCtx.lineWidth = 1.2;
+ mapCtx.setLineDash([7, 5]);
+ mapCtx.lineDashOffset = -mapTime * 18;
  mapCtx.beginPath();
- mapCtx.moveTo(l1x, l1y);
+ mapCtx.moveTo(l1x + 5, l1y);
  mapCtx.lineTo(subX, subY);
  mapCtx.stroke();
  mapCtx.setLineDash([]);
+ mapCtx.restore();
 
- // 2. Glow ring at sub-solar target
- mapCtx.strokeStyle = 'rgba(234,179,8,0.6)';
- mapCtx.lineWidth = 1;
+ // Pulsing target ring at sub-solar point
+ const tRad = 9 + 5 * Math.sin(mapTime * 5);
+ mapCtx.strokeStyle = `rgba(234,179,8,${0.55 + 0.4 * Math.sin(mapTime * 5)})`;
+ mapCtx.lineWidth = 1.5;
+ mapCtx.beginPath(); mapCtx.arc(subX, subY, tRad, 0, Math.PI * 2); mapCtx.stroke();
+ mapCtx.strokeStyle = 'rgba(255,200,50,0.25)';
+ mapCtx.lineWidth = 4;
+ mapCtx.beginPath(); mapCtx.arc(subX, subY, tRad + 5, 0, Math.PI * 2); mapCtx.stroke();
+
+ // Cross-hair at sub-solar
+ mapCtx.strokeStyle = 'rgba(234,179,8,0.5)';
+ mapCtx.lineWidth = 0.8;
  mapCtx.beginPath();
- mapCtx.arc(subX, subY, 8 + 4 * Math.sin(mapTime * 6), 0, Math.PI * 2);
+ mapCtx.moveTo(subX - 14, subY); mapCtx.lineTo(subX + 14, subY);
+ mapCtx.moveTo(subX, subY - 14); mapCtx.lineTo(subX, subY + 14);
  mapCtx.stroke();
 
- // 3. Aditya-L1 icon/dot in top-left
- const pulseR = 5 + 2 * Math.sin(mapTime * 4);
- const l1Glow = mapCtx.createRadialGradient(l1x, l1y, 0, l1x, l1y, pulseR * 2);
- l1Glow.addColorStop(0, 'rgba(6,182,212,0.4)');
- l1Glow.addColorStop(1, 'rgba(6,182,212,0)');
- mapCtx.fillStyle = l1Glow;
- mapCtx.beginPath(); mapCtx.arc(l1x, l1y, pulseR * 2, 0, Math.PI*2); mapCtx.fill();
-
- mapCtx.fillStyle = '#06b6d4';
- mapCtx.beginPath(); mapCtx.arc(l1x, l1y, 4, 0, Math.PI*2); mapCtx.fill();
-
- mapCtx.fillStyle = '#ffffff';
- mapCtx.font = `bold ${Math.round(W * 0.015)}px Inter, sans-serif`;
- mapCtx.fillText('🛰 Aditya-L1', l1x + 8, l1y - 2);
- mapCtx.fillStyle = 'rgba(255,255,255,0.5)';
- mapCtx.font = `${Math.round(W * 0.012)}px JetBrains Mono, monospace`;
- mapCtx.fillText('L1 HALO ORBIT (1.5M km)', l1x + 8, l1y + 8);
-
- // 4. Telemetry Focus HUD in top-right
- const hudX = W * 0.64, hudY = H * 0.08;
- mapCtx.fillStyle = 'rgba(10,22,40,0.7)';
+ // === 10. STATUS STRIP (bottom of canvas — never overlaps map content) ===
+ const stripH = Math.round(H * 0.09);
+ const stripY = H - stripH;
+ mapCtx.fillStyle = 'rgba(4,12,26,0.82)';
+ mapCtx.fillRect(0, stripY, W, stripH);
  mapCtx.strokeStyle = 'rgba(6,182,212,0.3)';
- mapCtx.lineWidth = 1;
- mapCtx.fillRect(hudX, hudY, W * 0.33, H * 0.16);
- mapCtx.strokeRect(hudX, hudY, W * 0.33, H * 0.16);
+ mapCtx.lineWidth = 0.8;
+ mapCtx.beginPath(); mapCtx.moveTo(0, stripY); mapCtx.lineTo(W, stripY); mapCtx.stroke();
 
+ const sf = Math.max(9, Math.round(W * 0.012));
+ mapCtx.font = `bold ${sf}px Inter, sans-serif`;
  mapCtx.fillStyle = '#06b6d4';
- mapCtx.font = `bold ${Math.round(W * 0.012)}px Inter, sans-serif`;
- mapCtx.fillText('🛰 ADITYA-L1 TELEMETRY FOCUS', hudX + 8, hudY + 12);
+ mapCtx.fillText('🛰 ADITYA-L1 TELEMETRY', 10, stripY + stripH * 0.48);
+ mapCtx.fillStyle = '#22c55e';
+ mapCtx.fillText('● LOCK', W * 0.22, stripY + stripH * 0.48);
 
- mapCtx.fillStyle = 'rgba(255,255,255,0.7)';
- mapCtx.font = `${Math.round(W * 0.011)}px JetBrains Mono, monospace`;
- mapCtx.fillText(`Focus: Lat ${solarLat.toFixed(1)}°, Lon ${solarLon.toFixed(1)}°`, hudX + 8, hudY + 24);
- mapCtx.fillText(`Boresight: SoLEXS & HEL1OS Aligned`, hudX + 8, hudY + 34);
- mapCtx.fillText(`Telemetry: LOCK ACTIVE (1s cadence)`, hudX + 8, hudY + 44);
+ mapCtx.font = `${sf}px JetBrains Mono, monospace`;
+ mapCtx.fillStyle = 'rgba(200,220,255,0.75)';
+ mapCtx.fillText(`Focus: ${solarDecl.toFixed(1)}°N  ${solarLon.toFixed(1)}°E`, W * 0.3, stripY + stripH * 0.48);
+ mapCtx.fillStyle = 'rgba(200,220,255,0.55)';
+ mapCtx.fillText(`SoLEXS: ${(window.lastSolexsValue || 0).toFixed(1)} cts/s`, W * 0.58, stripY + stripH * 0.48);
+ mapCtx.fillText(`HEL1OS: ${(window.lastHel1osValue || 0).toFixed(1)} cts/s`, W * 0.78, stripY + stripH * 0.48);
 }
 requestAnimationFrame(drawWorldMap);
+
 
 function toggleBlackout(btn) {
  showBlackout=!showBlackout;
