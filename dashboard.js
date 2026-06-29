@@ -2167,6 +2167,22 @@ function switchTab(name,panelId,btn) {
   resizeSepCanvas();
  } else if(name==='suit') {
   resizeSuitCanvas();
+ } else if(name==='attitude') {
+  // Force immediate attitude update when tab is opened
+  if (typeof recentSolexs !== 'undefined' && recentSolexs.length > 0) {
+   const latest = recentSolexs[recentSolexs.length - 1] || 50;
+   if (typeof window._attitudeUpdate === 'function') window._attitudeUpdate(latest);
+  }
+ } else if(name==='fusion') {
+  if (typeof recentSolexs !== 'undefined' && recentSolexs.length > 0) {
+   const latest = recentSolexs[recentSolexs.length - 1] || 50;
+   if (typeof window._fusionUpdate === 'function') window._fusionUpdate(latest);
+  }
+ } else if(name==='pinn') {
+  if (typeof recentSolexs !== 'undefined' && recentSolexs.length > 0) {
+   const latest = recentSolexs[recentSolexs.length - 1] || 50;
+   if (typeof window._pinnUpdate === 'function') window._pinnUpdate(latest);
+  }
  }
 }
 
