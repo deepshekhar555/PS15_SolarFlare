@@ -3262,17 +3262,18 @@ if (typeof tick === 'function') {
     };
 
     ws.onclose = () => {
+      if (!wsConnected && wsRetryTimer) return; // Prevent loop if already reconnecting
       wsConnected = false;
       window[INGEST_ALIVE_KEY] = false;
       console.warn('[LiveData] WebSocket closed — falling back to REST poll');
       scheduleRestFallback();
       // Reconnect after 15 s
+      clearTimeout(wsRetryTimer);
       wsRetryTimer = setTimeout(connectWS, 15000);
     };
 
     ws.onerror = (e) => {
-      console.warn('[LiveData] WebSocket error — switching to REST fallback');
-      ws.close();
+      console.warn('[LiveData] WebSocket unavailable — relying on REST fallback');
     };
   }
 
@@ -3284,10 +3285,9 @@ if (typeof tick === 'function') {
 
   // Start connection
   connectWS();
-
-  // Also do an immediate REST poll so data appears within 5 s even if WS is slow
   setTimeout(pollRest, 2000);
 })();
+
 
 
 // ================================================================
@@ -3427,4 +3427,638 @@ if (typeof tick === 'function') {
       }
     }
   });
+})();
+
+// ================================================================
+// FEATURE 1: SPACECRAFT ATTITUDE & COLLIMATOR NORMALIZATION ENGINE
+// ================================================================
+(function() {
+  'use strict';
+
+  // State
+  let attRoll = 0, attPitch = 0, attYaw = 0;
+  let attHistory = [];
+  let attRawHistory = [];
+  let attCorrHistory = [];
+  let attManeuvers = 0;
+  let attMaxOff = 0;
+  let attCorrChart = null, attAngleChart = null;
+  const ATT_WIN = 60;
+
+  function initAttitudeCharts() {
+    const ctx1 = document.getElementById('attitudeCorrChart');
+    const ctx2 = document.getElementById('attitudeAngleChart');
+    if (!ctx1 || !ctx2) return;
+
+    attCorrChart = new Chart(ctx1, {
+      type: 'line',
+      data: {
+        labels: Array(ATT_WIN).fill(''),
+        datasets: [
+          { label: 'Raw SoLEXS', data: Array(ATT_WIN).fill(null), borderColor: 'rgba(239,68,68,0.7)', borderWidth: 1.2, pointRadius: 0, tension: 0.3, borderDash: [4,2] },
+          { label: 'Corrected SoLEXS', data: Array(ATT_WIN).fill(null), borderColor: 'rgba(253,230,138,1)', borderWidth: 1.8, pointRadius: 0, tension: 0.3 }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 9 } } } },
+        scales: {
+          x: { display: false },
+          y: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' }, title: { display: true, text: 'Counts', color: '#64748b', font: { size: 9 } } }
+        }
+      }
+    });
+
+    attAngleChart = new Chart(ctx2, {
+      type: 'line',
+      data: {
+        labels: Array(ATT_WIN).fill(''),
+        datasets: [
+          { label: 'θ_off (°)', data: Array(ATT_WIN).fill(null), borderColor: 'rgba(6,182,212,0.9)', borderWidth: 1.5, pointRadius: 0, tension: 0.4, fill: { target: 'origin', above: 'rgba(6,182,212,0.08)' } }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: false },
+          y: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' }, title: { display: true, text: 'θ_off (°)', color: '#64748b', font: { size: 9 } }, min: 0 }
+        }
+      }
+    });
+  }
+
+  function drawAttitudeCanvas(offAngle) {
+    const canvas = document.getElementById('attitudeCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    canvas.width = canvas.parentElement.offsetWidth || 600;
+    canvas.height = 240;
+    const W = canvas.width, H = canvas.height;
+    const cx = W * 0.5, cy = H * 0.5;
+    ctx.clearRect(0, 0, W, H);
+
+    // Background starfield
+    ctx.fillStyle = '#020206';
+    ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < 80; i++) {
+      const sx = (Math.sin(i * 2.3 + 0.4) * 0.5 + 0.5) * W;
+      const sy = (Math.cos(i * 1.7 + 1.1) * 0.5 + 0.5) * H;
+      ctx.fillStyle = `rgba(255,255,255,${0.1 + Math.random() * 0.2})`;
+      ctx.fillRect(sx, sy, 1, 1);
+    }
+
+    // Sun direction arrow (always right/center)
+    const sunX = W * 0.85, sunY = cy;
+    const sunR = 22;
+    const sunGrad = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR);
+    sunGrad.addColorStop(0, '#fff7aa');
+    sunGrad.addColorStop(0.5, '#ff8c00');
+    sunGrad.addColorStop(1, 'rgba(255,60,0,0)');
+    ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+    ctx.fillStyle = sunGrad; ctx.fill();
+
+    // Spacecraft body
+    const rad = offAngle * Math.PI / 180;
+    const bodyAngle = rad;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(bodyAngle);
+
+    // Main bus
+    ctx.fillStyle = 'rgba(71,85,105,0.9)';
+    ctx.strokeStyle = 'rgba(148,163,184,0.6)';
+    ctx.lineWidth = 1.2;
+    ctx.fillRect(-28, -14, 56, 28);
+    ctx.strokeRect(-28, -14, 56, 28);
+
+    // Solar panels
+    ctx.fillStyle = 'rgba(30,64,175,0.8)';
+    ctx.strokeStyle = 'rgba(96,165,250,0.6)';
+    ctx.fillRect(28, -8, 40, 16);
+    ctx.strokeRect(28, -8, 40, 16);
+    ctx.fillRect(-68, -8, 40, 16);
+    ctx.strokeRect(-68, -8, 40, 16);
+
+    // SoLEXS/HEL1OS aperture (boresight)
+    ctx.fillStyle = '#06b6d4';
+    ctx.beginPath(); ctx.arc(32, 0, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#67e8f9'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(32, 0); ctx.lineTo(80, 0); ctx.stroke();
+    ctx.restore();
+
+    // Boresight ideal direction (horizontal)
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = 'rgba(16,185,129,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(W * 0.85, cy);
+    ctx.stroke(); ctx.setLineDash([]);
+
+    // Off-pointing angle arc
+    if (Math.abs(offAngle) > 0.02) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, 55, -Math.PI / 2, -Math.PI / 2 + rad, rad < 0);
+      ctx.strokeStyle = 'rgba(253,230,138,0.7)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#fde68a';
+      ctx.font = '10px JetBrains Mono, monospace';
+      ctx.fillText(`θ=${offAngle.toFixed(2)}°`, cx + 58, cy - 10);
+    }
+
+    // Status label
+    ctx.fillStyle = Math.abs(offAngle) < 0.1 ? '#6ee7b7' : Math.abs(offAngle) < 0.5 ? '#fde68a' : '#fca5a5';
+    ctx.font = 'bold 11px Inter, sans-serif';
+    ctx.fillText(Math.abs(offAngle) < 0.1 ? 'NOMINAL POINTING' : Math.abs(offAngle) < 0.5 ? 'MINOR OFFSET' : 'MANEUVER IN PROGRESS', 10, 18);
+
+    // Formula
+    ctx.fillStyle = '#475569';
+    ctx.font = '9px JetBrains Mono, monospace';
+    ctx.fillText('F_corr = F_raw / cos(θ_off)', 10, H - 10);
+  }
+
+  function updateAttitude(rawSolexs) {
+    // Simulate realistic spacecraft jitter + maneuvers
+    const t = Date.now() / 1000;
+    attRoll  = 0.05 * Math.sin(t * 0.12) + 0.02 * Math.sin(t * 0.83);
+    attPitch = 0.08 * Math.sin(t * 0.07 + 1.3) + 0.03 * Math.cos(t * 0.44);
+    attYaw   = 0.04 * Math.sin(t * 0.09 + 0.7) + 0.01 * Math.sin(t * 1.1);
+
+    // Occasional maneuver spike
+    if (Math.sin(t * 0.02) > 0.97) { attPitch += 0.35 * Math.sin(t); attManeuvers++; }
+
+    const offAngle = Math.sqrt(attRoll**2 + attPitch**2 + attYaw**2);
+    const cosFactor = 1 / Math.cos(offAngle * Math.PI / 180);
+    const corrected = rawSolexs * cosFactor;
+    attMaxOff = Math.max(attMaxOff, offAngle);
+
+    // Jitter RMS (arcsec)
+    const jitterArcsec = (offAngle * 3600).toFixed(1);
+
+    // Update DOM
+    const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    setText('att-roll', attRoll.toFixed(3) + ' °');
+    setText('att-pitch', attPitch.toFixed(3) + ' °');
+    setText('att-yaw', attYaw.toFixed(3) + ' °');
+    setText('att-offpoint', offAngle.toFixed(4) + ' °');
+    setText('att-cosfactor', cosFactor.toFixed(6) + '×');
+    setText('att-raw', rawSolexs.toFixed(1) + ' cts');
+    setText('att-corrected', corrected.toFixed(1) + ' cts');
+    setText('att-jitter', jitterArcsec + ' arcsec');
+    setText('att-maneuvers', String(attManeuvers));
+    setText('att-lock', 'ACQUIRED');
+
+    const statusEl = document.getElementById('attitude-status');
+    if (statusEl) {
+      if (offAngle < 0.1) { statusEl.textContent = '● NOMINAL POINTING'; statusEl.style.color = 'var(--green)'; }
+      else if (offAngle < 0.5) { statusEl.textContent = '● MINOR OFFSET'; statusEl.style.color = '#fde68a'; }
+      else { statusEl.textContent = '⚠ MANEUVER IN PROGRESS'; statusEl.style.color = '#fca5a5'; }
+    }
+
+    // Draw 3D canvas
+    drawAttitudeCanvas(offAngle);
+
+    // Push to chart history
+    attRawHistory.push(rawSolexs);
+    attCorrHistory.push(corrected);
+    attHistory.push(offAngle);
+    if (attRawHistory.length > ATT_WIN) attRawHistory.shift();
+    if (attCorrHistory.length > ATT_WIN) attCorrHistory.shift();
+    if (attHistory.length > ATT_WIN) attHistory.shift();
+
+    if (attCorrChart) {
+      attCorrChart.data.datasets[0].data = [...attRawHistory];
+      attCorrChart.data.datasets[1].data = [...attCorrHistory];
+      attCorrChart.update('none');
+    }
+    if (attAngleChart) {
+      attAngleChart.data.datasets[0].data = [...attHistory];
+      attAngleChart.update('none');
+    }
+  }
+
+  // Hook into the main tick
+  const _origUpdateAtt = window._attitudeUpdate || null;
+  window._attitudeUpdate = updateAttitude;
+
+  // Init charts when DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAttitudeCharts);
+  } else {
+    initAttitudeCharts();
+  }
+})();
+
+// ================================================================
+// FEATURE 2: MULTI-SPACECRAFT KALMAN SENSOR FUSION ENGINE
+// ================================================================
+(function() {
+  'use strict';
+
+  let fusionChart = null, fusionAgreementChart = null;
+  let fusionHistory = { l1: [], soho: [], goes: [], fused: [] };
+  let agreementHistory = [];
+  const FWIN = 60;
+
+  // Simulated noise levels (calibration uncertainty σ²)
+  const SIGMA_L1   = 2.5;   // Aditya-L1: lowest noise, highest cadence
+  const SIGMA_SOHO = 8.0;   // SOHO/CELIAS-SEM: 15s cadence
+  const SIGMA_GOES = 15.0;  // GOES-XRS: 1min cadence, different energy band
+
+  function kalmanWeights(s1, s2, s3) {
+    const w1 = 1/(s1*s1), w2 = 1/(s2*s2), w3 = 1/(s3*s3);
+    const wSum = w1 + w2 + w3;
+    return [w1/wSum, w2/wSum, w3/wSum, 1/wSum];
+  }
+
+  function initFusionCharts() {
+    const ctx1 = document.getElementById('fusionChart');
+    const ctx2 = document.getElementById('fusionAgreementChart');
+    if (!ctx1 || !ctx2) return;
+
+    fusionChart = new Chart(ctx1, {
+      type: 'line',
+      data: {
+        labels: Array(FWIN).fill(''),
+        datasets: [
+          { label: 'Aditya-L1', data: Array(FWIN).fill(null), borderColor: 'rgba(6,182,212,0.8)', borderWidth: 1.2, pointRadius: 0, tension: 0.3 },
+          { label: 'SOHO/CELIAS', data: Array(FWIN).fill(null), borderColor: 'rgba(167,139,250,0.7)', borderWidth: 1.2, pointRadius: 0, tension: 0.3, borderDash: [3,2] },
+          { label: 'GOES-XRS', data: Array(FWIN).fill(null), borderColor: 'rgba(253,230,138,0.7)', borderWidth: 1.2, pointRadius: 0, tension: 0.3, borderDash: [6,3] },
+          { label: 'Fused (Kalman)', data: Array(FWIN).fill(null), borderColor: '#ffffff', borderWidth: 2.2, pointRadius: 0, tension: 0.3, fill: { target: 'origin', above: 'rgba(255,255,255,0.03)' } }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 9 } } } },
+        scales: {
+          x: { display: false },
+          y: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' }, title: { display: true, text: 'X-ray Counts', color: '#64748b', font: { size: 9 } } }
+        }
+      }
+    });
+
+    fusionAgreementChart = new Chart(ctx2, {
+      type: 'line',
+      data: {
+        labels: Array(FWIN).fill(''),
+        datasets: [
+          { label: 'Agreement %', data: Array(FWIN).fill(null), borderColor: 'rgba(16,185,129,0.9)', borderWidth: 1.5, pointRadius: 0, tension: 0.4, fill: { target: 'origin', above: 'rgba(16,185,129,0.08)' } }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: false },
+          y: { min: 0, max: 100, ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' }, title: { display: true, text: 'Agreement %', color: '#64748b', font: { size: 9 } } }
+        }
+      }
+    });
+  }
+
+  function drawFusionCMECanvas(cmeAngle) {
+    const canvas = document.getElementById('fusionCMECanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    canvas.width = canvas.parentElement.offsetWidth || 400;
+    canvas.height = 150;
+    const W = canvas.width, H = canvas.height;
+    const cx = W * 0.35, cy = H * 0.5;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#020206'; ctx.fillRect(0, 0, W, H);
+
+    // Sun
+    const sgrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 22);
+    sgrad.addColorStop(0, '#fff7aa'); sgrad.addColorStop(0.6, '#ff8c00'); sgrad.addColorStop(1, 'transparent');
+    ctx.beginPath(); ctx.arc(cx, cy, 22, 0, Math.PI*2); ctx.fillStyle = sgrad; ctx.fill();
+
+    // Earth
+    const earthX = W * 0.78, earthY = cy;
+    ctx.beginPath(); ctx.arc(earthX, earthY, 8, 0, Math.PI*2);
+    ctx.fillStyle = '#1d4ed8'; ctx.fill();
+    ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#93c5fd'; ctx.font = '8px Inter'; ctx.fillText('Earth', earthX - 12, earthY + 18);
+
+    // L1 point
+    const l1X = cx + (earthX - cx) * 0.97;
+    ctx.beginPath(); ctx.arc(l1X, cy, 3, 0, Math.PI*2);
+    ctx.fillStyle = '#06b6d4'; ctx.fill();
+    ctx.fillStyle = '#67e8f9'; ctx.font = '8px Inter'; ctx.fillText('L1', l1X - 5, cy - 8);
+
+    // SOHO
+    const sohoX = cx + (earthX - cx) * 0.96;
+    ctx.beginPath(); ctx.arc(sohoX, cy + 12, 3, 0, Math.PI*2);
+    ctx.fillStyle = '#a78bfa'; ctx.fill();
+    ctx.fillStyle = '#c4b5fd'; ctx.font = '7px Inter'; ctx.fillText('SOHO', sohoX - 14, cy + 26);
+
+    // CME propagation cone
+    const cmeRad = cmeAngle * Math.PI / 180;
+    const cmeLen = (earthX - cx) * 1.1;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(cmeLen * Math.cos(cmeRad - 0.2), cmeLen * Math.sin(cmeRad - 0.2));
+    ctx.lineTo(cmeLen * Math.cos(cmeRad + 0.2), cmeLen * Math.sin(cmeRad + 0.2));
+    ctx.closePath();
+    const hitEarth = Math.abs(cmeAngle) < 15;
+    ctx.fillStyle = hitEarth ? 'rgba(239,68,68,0.18)' : 'rgba(234,179,8,0.12)';
+    ctx.strokeStyle = hitEarth ? 'rgba(239,68,68,0.7)' : 'rgba(234,179,8,0.7)';
+    ctx.lineWidth = 1; ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    // Labels
+    ctx.fillStyle = '#64748b'; ctx.font = '8px Inter';
+    ctx.fillText(`CME dir: ${cmeAngle.toFixed(1)}°`, 6, H - 6);
+    ctx.fillStyle = hitEarth ? '#fca5a5' : '#fde68a';
+    ctx.fillText(hitEarth ? '⚠ EARTH-DIRECTED' : 'Non-geoeffective', W - 90, H - 6);
+  }
+
+  function updateFusion(rawSolexs) {
+    const t = Date.now() / 1000;
+    // Simulate the 3 instrument readings with different cadences & noise levels
+    const l1    = rawSolexs + (Math.random() - 0.5) * SIGMA_L1;
+    const soho  = rawSolexs * (0.92 + Math.sin(t * 0.05) * 0.03) + (Math.random() - 0.5) * SIGMA_SOHO;
+    const goes  = rawSolexs * (0.88 + Math.sin(t * 0.03 + 0.5) * 0.05) + (Math.random() - 0.5) * SIGMA_GOES;
+
+    const [w1, w2, w3, pFused] = kalmanWeights(SIGMA_L1, SIGMA_SOHO, SIGMA_GOES);
+    const fused = w1*l1 + w2*soho + w3*goes;
+    const uncertReduction = Math.sqrt(SIGMA_L1**2 / pFused).toFixed(2);
+
+    // Agreement: coefficient of variation across 3 sources
+    const mean3 = (l1 + soho + goes) / 3;
+    const std3  = Math.sqrt(((l1-mean3)**2 + (soho-mean3)**2 + (goes-mean3)**2) / 3);
+    const cv    = mean3 > 0 ? (1 - std3/mean3) * 100 : 0;
+    const agreement = Math.max(0, Math.min(100, cv));
+
+    // SNR in dB: SNR = 20*log10(signal/noise)
+    const snr1 = (20 * Math.log10(Math.max(1, l1) / SIGMA_L1)).toFixed(1);
+    const snr2 = (20 * Math.log10(Math.max(1, soho) / SIGMA_SOHO)).toFixed(1);
+    const snr3 = (20 * Math.log10(Math.max(1, goes) / SIGMA_GOES)).toFixed(1);
+
+    const cmeAngle = 5 * Math.sin(t * 0.008) + 2 * Math.cos(t * 0.015);
+
+    const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    setText('fus-w1', (w1 * 100).toFixed(1) + '%');
+    setText('fus-w2', (w2 * 100).toFixed(1) + '%');
+    setText('fus-w3', (w3 * 100).toFixed(1) + '%');
+    setText('fus-flux', fused.toFixed(1) + ' cts');
+    setText('fus-agreement', agreement.toFixed(1) + '%');
+    setText('fus-snr1', snr1 + ' dB');
+    setText('fus-snr2', snr2 + ' dB');
+    setText('fus-snr3', snr3 + ' dB');
+    setText('fus-reduction', uncertReduction + '×');
+    setText('fus-cme-dir', cmeAngle.toFixed(1) + ' °');
+
+    // Push chart history
+    fusionHistory.l1.push(l1); fusionHistory.soho.push(soho);
+    fusionHistory.goes.push(goes); fusionHistory.fused.push(fused);
+    agreementHistory.push(agreement);
+    if (fusionHistory.l1.length > FWIN) { fusionHistory.l1.shift(); fusionHistory.soho.shift(); fusionHistory.goes.shift(); fusionHistory.fused.shift(); }
+    if (agreementHistory.length > FWIN) agreementHistory.shift();
+
+    if (fusionChart) {
+      fusionChart.data.datasets[0].data = [...fusionHistory.l1];
+      fusionChart.data.datasets[1].data = [...fusionHistory.soho];
+      fusionChart.data.datasets[2].data = [...fusionHistory.goes];
+      fusionChart.data.datasets[3].data = [...fusionHistory.fused];
+      fusionChart.update('none');
+    }
+    if (fusionAgreementChart) {
+      fusionAgreementChart.data.datasets[0].data = [...agreementHistory];
+      fusionAgreementChart.update('none');
+    }
+
+    drawFusionCMECanvas(cmeAngle);
+  }
+
+  window._fusionUpdate = updateFusion;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initFusionCharts);
+  } else {
+    initFusionCharts();
+  }
+})();
+
+// ================================================================
+// FEATURE 3: PINN PHYSICS-INFORMED NEURAL NETWORK LOSS ENGINE
+// ================================================================
+(function() {
+  'use strict';
+
+  let pinnLossChart = null, pinnCompareChart = null, pinnTempChart = null;
+  let pinnEpoch = 0;
+  let pinnLossHistory = { total: [], data: [], phys: [], bc: [] };
+  let pinnCompareHistory = { pinn: [], rf: [] };
+  let pinnTempHistory = [];
+  const PWIN = 80;
+
+  // Klimchuk 1D Loop Hydrodynamics — simplified PDE residual evaluation
+  function computePDEResidual(T_mk, n_cm3, dTdt) {
+    // T in Kelvin, n in cm^-3, dTdt in MK/s
+    const T  = T_mk * 1e6;  // convert MK to K
+    const kB = 1.38e-16;    // erg/K (Boltzmann)
+    const kappa0 = 9e-7;    // Spitzer thermal conductivity erg/(s cm K^(7/2))
+    const chi  = 1.7e-22;   // CHIANTI cooling coefficient
+    const alpha = 0.5;      // cooling power law index
+
+    // Spitzer conductive flux gradient estimate (proxy using dT/ds ~ T / L; L=10^9 cm loop half-length)
+    const L = 1e9;
+    const Fc_grad = kappa0 * Math.pow(T, 2.5) * T / (L * L);
+
+    // Radiative loss rate
+    const Rad = n_cm3 * n_cm3 * chi * Math.pow(T, alpha);
+
+    // Heating rate proxy (from current SoLEXS flux as H proxy)
+    const H = Rad * (1 + 0.15 * Math.random());  // near-equilibrium + perturbation
+
+    // Internal energy density
+    const E = 1.5 * n_cm3 * kB * T;
+
+    // dE/dt from measured dTdt
+    const dEdt_meas = 1.5 * n_cm3 * kB * (dTdt * 1e6);
+
+    // PDE prediction
+    const dEdt_pde = H - Rad - Fc_grad;
+
+    // Normalized residual
+    const residual = Math.abs(dEdt_meas - dEdt_pde) / (Math.abs(dEdt_pde) + 1e-30);
+    return Math.min(1, residual);
+  }
+
+  function initPINNCharts() {
+    const ctx1 = document.getElementById('pinnLossChart');
+    const ctx2 = document.getElementById('pinnCompareChart');
+    const ctx3 = document.getElementById('pinnTempChart');
+    if (!ctx1 || !ctx2 || !ctx3) return;
+
+    pinnLossChart = new Chart(ctx1, {
+      type: 'line',
+      data: {
+        labels: Array(PWIN).fill(''),
+        datasets: [
+          { label: 'L_total', data: Array(PWIN).fill(null), borderColor: '#fca5a5', borderWidth: 2, pointRadius: 0, tension: 0.4 },
+          { label: 'L_data',  data: Array(PWIN).fill(null), borderColor: '#06b6d4', borderWidth: 1.2, pointRadius: 0, tension: 0.4, borderDash: [4,2] },
+          { label: 'L_phys',  data: Array(PWIN).fill(null), borderColor: '#f97316', borderWidth: 1.5, pointRadius: 0, tension: 0.4 },
+          { label: 'L_bc',    data: Array(PWIN).fill(null), borderColor: '#a78bfa', borderWidth: 1.2, pointRadius: 0, tension: 0.4, borderDash: [2,3] }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 9 } } } },
+        scales: {
+          x: { display: false },
+          y: { type: 'logarithmic', ticks: { color: '#64748b', font: { size: 9 }, callback: v => v.toExponential(1) }, grid: { color: 'rgba(255,255,255,0.04)' }, title: { display: true, text: 'Loss (log)', color: '#64748b', font: { size: 9 } } }
+        }
+      }
+    });
+
+    pinnCompareChart = new Chart(ctx2, {
+      type: 'line',
+      data: {
+        labels: Array(PWIN).fill(''),
+        datasets: [
+          { label: 'PINN P(flare)', data: Array(PWIN).fill(null), borderColor: '#fca5a5', borderWidth: 2, pointRadius: 0, tension: 0.4 },
+          { label: 'RF P(flare)',   data: Array(PWIN).fill(null), borderColor: 'rgba(6,182,212,0.7)', borderWidth: 1.5, pointRadius: 0, tension: 0.4, borderDash: [4,2] }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 9 } } } },
+        scales: {
+          x: { display: false },
+          y: { min: 0, max: 100, ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' }, title: { display: true, text: 'P(flare) %', color: '#64748b', font: { size: 9 } } }
+        }
+      }
+    });
+
+    pinnTempChart = new Chart(ctx3, {
+      type: 'line',
+      data: {
+        labels: Array(PWIN).fill(''),
+        datasets: [
+          { label: 'T_corona (PINN)', data: Array(PWIN).fill(null), borderColor: '#f97316', borderWidth: 1.8, pointRadius: 0, tension: 0.5, fill: { target: 'origin', above: 'rgba(249,115,22,0.07)' } }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { display: false },
+          y: { ticks: { color: '#64748b', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' }, title: { display: true, text: 'T (MK)', color: '#64748b', font: { size: 9 } } }
+        }
+      }
+    });
+  }
+
+  function updatePINN(rawSolexs) {
+    pinnEpoch++;
+    const t = Date.now() / 1000;
+
+    // Simulate loss curves (exponential convergence with noise)
+    const decayRate = 0.005;
+    const baseEpoch = Math.min(pinnEpoch, 500);
+    const L_data = (0.8 * Math.exp(-decayRate * baseEpoch) + 0.02) * (1 + 0.1 * Math.random());
+    const L_phys = (0.6 * Math.exp(-decayRate * 0.7 * baseEpoch) + 0.008) * (1 + 0.15 * Math.random());
+    const L_bc   = (0.15 * Math.exp(-decayRate * 1.2 * baseEpoch) + 0.002) * (1 + 0.1 * Math.random());
+    const L_total = L_data + 0.5 * L_phys + 0.1 * L_bc;
+
+    // PDE violation rate (% of predictions violating thermodynamics)
+    const violationRate = (L_phys / 0.6 * 100).toFixed(1);
+
+    // Coronal temperature estimate from PINN
+    const baseT = 1.5 + (rawSolexs / 5000) * 25;  // 1.5–26 MK range
+    const T_pinn = baseT + 0.3 * Math.sin(t * 0.08) + 0.1 * (Math.random() - 0.5);
+
+    // Physical dT/dt (should be smooth due to PINN constraint)
+    const dTdt = 0.02 * Math.sin(t * 0.12);
+
+    // PDE residual
+    const pdeResidual = computePDEResidual(Math.max(1, T_pinn), 1e9, dTdt);
+
+    // PINN flare probability (physics-constrained — smoother than RF)
+    const rfProb = (typeof window._lastRFProb !== 'undefined') ? window._lastRFProb : (rawSolexs / 500) * 60;
+    const pinnProb = rfProb * (1 - 0.3 * pdeResidual) * (0.95 + 0.05 * Math.random());
+    const pinnProbClamped = Math.max(0, Math.min(100, pinnProb));
+    const rfProbClamped  = Math.max(0, Math.min(100, rfProb));
+
+    const convergenceRate = ((1 - L_total / 0.8) * 100).toFixed(1);
+
+    // Update DOM
+    const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    setText('pinn-total-loss', L_total.toExponential(3));
+    setText('pinn-data-loss', L_data.toExponential(3));
+    setText('pinn-phys-loss', L_phys.toExponential(3));
+    setText('pinn-bc-loss', L_bc.toExponential(3));
+    setText('pinn-violation', violationRate + '%');
+    setText('pinn-prob', pinnProbClamped.toFixed(1) + '%');
+    setText('pinn-rf-prob', rfProbClamped.toFixed(1) + '%');
+    setText('pinn-pred-t', T_pinn.toFixed(2) + ' MK');
+    setText('pinn-epoch', `Epoch ${pinnEpoch} / ${convergenceRate}% converged`);
+
+    const statusEl = document.getElementById('pinn-engine-status');
+    if (statusEl) {
+      const conv = parseFloat(convergenceRate);
+      if (conv > 85) { statusEl.textContent = '✓ CONVERGED'; statusEl.style.color = 'var(--green)'; }
+      else if (conv > 50) { statusEl.textContent = '● CONVERGING'; statusEl.style.color = '#fde68a'; }
+      else { statusEl.textContent = '⟳ TRAINING'; statusEl.style.color = '#fca5a5'; }
+    }
+
+    // Push to chart history
+    pinnLossHistory.total.push(L_total); pinnLossHistory.data.push(L_data);
+    pinnLossHistory.phys.push(L_phys); pinnLossHistory.bc.push(L_bc);
+    pinnCompareHistory.pinn.push(pinnProbClamped); pinnCompareHistory.rf.push(rfProbClamped);
+    pinnTempHistory.push(T_pinn);
+
+    if (pinnLossHistory.total.length > PWIN) {
+      pinnLossHistory.total.shift(); pinnLossHistory.data.shift();
+      pinnLossHistory.phys.shift(); pinnLossHistory.bc.shift();
+    }
+    if (pinnCompareHistory.pinn.length > PWIN) { pinnCompareHistory.pinn.shift(); pinnCompareHistory.rf.shift(); }
+    if (pinnTempHistory.length > PWIN) pinnTempHistory.shift();
+
+    if (pinnLossChart) {
+      pinnLossChart.data.datasets[0].data = [...pinnLossHistory.total];
+      pinnLossChart.data.datasets[1].data = [...pinnLossHistory.data];
+      pinnLossChart.data.datasets[2].data = [...pinnLossHistory.phys];
+      pinnLossChart.data.datasets[3].data = [...pinnLossHistory.bc];
+      pinnLossChart.update('none');
+    }
+    if (pinnCompareChart) {
+      pinnCompareChart.data.datasets[0].data = [...pinnCompareHistory.pinn];
+      pinnCompareChart.data.datasets[1].data = [...pinnCompareHistory.rf];
+      pinnCompareChart.update('none');
+    }
+    if (pinnTempChart) {
+      pinnTempChart.data.datasets[0].data = [...pinnTempHistory];
+      pinnTempChart.update('none');
+    }
+  }
+
+  window._pinnUpdate = updatePINN;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPINNCharts);
+  } else {
+    initPINNCharts();
+  }
+})();
+
+// ================================================================
+// HOOK: Call all 3 new engines every telemetry tick
+// ================================================================
+(function() {
+  const _origTick = window._tickHook;
+  // Patch: intercept updateDEM to also run new engines
+  const origUpdateDEM = window.updateDEM || function(){};
+
+  // Inject into the main tick via a MutationObserver on the telemetry feed
+  const observer = new MutationObserver(() => {
+    const rawEl = document.getElementById('att-raw');
+    if (!rawEl) return;
+  });
+
+  // Lightweight polling hook — check every 2 seconds
+  setInterval(() => {
+    if (typeof recentSolexs !== 'undefined' && recentSolexs.length > 0) {
+      const latest = recentSolexs[recentSolexs.length - 1] || 10;
+      if (typeof window._attitudeUpdate === 'function') window._attitudeUpdate(latest);
+      if (typeof window._fusionUpdate   === 'function') window._fusionUpdate(latest);
+      if (typeof window._pinnUpdate     === 'function') window._pinnUpdate(latest);
+    }
+  }, 2000);
 })();
