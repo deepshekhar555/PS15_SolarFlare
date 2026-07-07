@@ -833,34 +833,138 @@ const CONTINENTS = [
  [[-45,85],[-20,83],[-18,76],[-25,70],[-45,60],[-55,60],[-58,65],[-58,75],[-50,80],[-45,85]],
 ];
 
-// Satellites
+// ── CelesTrak TLE Integration & SGP4 Propagation ──
+// Satellite definitions with NORAD IDs for real TLE fetching
 const SATS_DEF = [
- {id:'ISS',     name:'ISS',       type:'crewed', orbit:'LEO', baseLon:20,   baseLat:51.6, lonSpd:4.2, color:'#00d4ff'},
- {id:'INSAT3D', name:'INSAT-3D',  type:'weather',orbit:'GEO', baseLon:74,   baseLat:0,    lonSpd:0,   color:'#eab308'},
- {id:'INSAT3R', name:'INSAT-3DR', type:'weather',orbit:'GEO', baseLon:93.5, baseLat:0,    lonSpd:0,   color:'#eab308'},
- {id:'NavIC1',  name:'NavIC-1',   type:'nav',    orbit:'GSO', baseLon:55,   baseLat:29,   lonSpd:0,   color:'#a855f7'},
- {id:'NavIC6',  name:'NavIC-6',   type:'nav',    orbit:'GEO', baseLon:129.5,baseLat:0,    lonSpd:0,   color:'#a855f7'},
- {id:'GPSA',    name:'GPS-IIF-A', type:'nav',    orbit:'MEO', baseLon:-60,  baseLat:55,   lonSpd:1.5, color:'#22c55e'},
- {id:'GPSB',    name:'GPS-IIF-B', type:'nav',    orbit:'MEO', baseLon:60,   baseLat:-55,  lonSpd:-1.5,color:'#22c55e'},
- {id:'GPSC',    name:'GPS-IIF-C', type:'nav',    orbit:'MEO', baseLon:160,  baseLat:55,   lonSpd:1.5, color:'#22c55e'},
- {id:'CARTOS',  name:'Cartosat-3',type:'earth',  orbit:'SSO', baseLon:45,   baseLat:97.5, lonSpd:5.0, color:'#f97316'},
- {id:'RISAT2B', name:'RISAT-2B',  type:'radar',  orbit:'LEO', baseLon:-30,  baseLat:37,   lonSpd:4.8, color:'#f97316'},
+ {id:'ISS',     name:'ISS',       type:'crewed', orbit:'LEO', baseLon:20,   baseLat:51.6, lonSpd:4.2, color:'#00d4ff', noradId:25544, altKm:420},
+ {id:'INSAT3D', name:'INSAT-3D',  type:'weather',orbit:'GEO', baseLon:74,   baseLat:0,    lonSpd:0,   color:'#eab308', noradId:39216, altKm:35786},
+ {id:'INSAT3R', name:'INSAT-3DR', type:'weather',orbit:'GEO', baseLon:93.5, baseLat:0,    lonSpd:0,   color:'#eab308', noradId:41752, altKm:35786},
+ {id:'NavIC1',  name:'NavIC-1',   type:'nav',    orbit:'GSO', baseLon:55,   baseLat:29,   lonSpd:0,   color:'#a855f7', noradId:39199, altKm:35786},
+ {id:'NavIC6',  name:'NavIC-6',   type:'nav',    orbit:'GEO', baseLon:129.5,baseLat:0,    lonSpd:0,   color:'#a855f7', noradId:41241, altKm:35786},
+ {id:'GPSA',    name:'GPS-IIF-A', type:'nav',    orbit:'MEO', baseLon:-60,  baseLat:55,   lonSpd:1.5, color:'#22c55e', noradId:36585, altKm:20200},
+ {id:'GPSB',    name:'GPS-IIF-B', type:'nav',    orbit:'MEO', baseLon:60,   baseLat:-55,  lonSpd:-1.5,color:'#22c55e', noradId:37753, altKm:20200},
+ {id:'GPSC',    name:'GPS-IIF-C', type:'nav',    orbit:'MEO', baseLon:160,  baseLat:55,   lonSpd:1.5, color:'#22c55e', noradId:38833, altKm:20200},
+ {id:'CARTOS',  name:'Cartosat-3',type:'earth',  orbit:'SSO', baseLon:45,   baseLat:97.5, lonSpd:5.0, color:'#f97316', noradId:44804, altKm:509},
+ {id:'RISAT2B', name:'RISAT-2B',  type:'radar',  orbit:'LEO', baseLon:-30,  baseLat:37,   lonSpd:4.8, color:'#f97316', noradId:44233, altKm:556},
 ];
 let satPhases = {};
 SATS_DEF.forEach(s=>{ satPhases[s.id]=Math.random()*Math.PI*2; });
+
+// ── Satellite TLE Records (loaded from cache or CelesTrak) ──
+let satTLERecords = {}; // id -> {satrec} from satellite.js
+let sgp4Available = (typeof satellite !== 'undefined' && satellite.twoline2satrec);
+
+// Load cached TLE data from localStorage or celestrak_cache.json
+(async function initSatelliteTLE() {
+ try {
+  // 1. Check localStorage first
+  const cached = localStorage.getItem('celestrak_tle_cache');
+  if (cached) {
+   const data = JSON.parse(cached);
+   const age = Date.now() - new Date(data.fetchedAt).getTime();
+   if (age < 24 * 3600 * 1000) { // less than 24 hours old
+    parseTLECache(data);
+    console.log('[CelesTrak] Loaded TLE from localStorage cache');
+    return;
+   }
+  }
+  // 2. Try loading from local fallback JSON file
+  const resp = await fetch('celestrak_cache.json');
+  if (resp.ok) {
+   const data = await resp.json();
+   parseTLECache(data);
+   localStorage.setItem('celestrak_tle_cache', JSON.stringify(data));
+   console.log('[CelesTrak] Loaded TLE from celestrak_cache.json');
+  }
+ } catch (e) {
+  console.warn('[CelesTrak] TLE init failed, using hardcoded orbits:', e.message);
+ }
+})();
+
+function parseTLECache(data) {
+ if (!sgp4Available || !data.satellites) return;
+ for (const sat of data.satellites) {
+  try {
+   const satrec = satellite.twoline2satrec(sat.tle1, sat.tle2);
+   if (satrec && !satrec.error) {
+    satTLERecords[sat.id] = satrec;
+   }
+  } catch (e) { /* skip invalid TLE */ }
+ }
+}
+
+// ── Dynamic Satellite Focus Cycling System ──
+let focusedSatIndex = 0;
+let focusLocked = false; // true when user clicks to lock focus
+let lastFocusCycleTime = 0;
+const FOCUS_CYCLE_INTERVAL = 8000; // cycle every 8 seconds
+
+// Click-to-focus handler (attached after canvas is ready)
+mapCanvas.addEventListener('click', function(e) {
+ const rect = mapCanvas.getBoundingClientRect();
+ const clickX = (e.clientX - rect.left) * (mapCanvas.width / rect.width);
+ const clickY = (e.clientY - rect.top) * (mapCanvas.height / rect.height);
+ const W = mapCanvas.width, H = mapCanvas.height;
+
+ let closestIdx = -1, closestDist = Infinity;
+ for (let i = 0; i < SATS_DEF.length; i++) {
+  const pos = getSatPos(SATS_DEF[i], mapTime);
+  const [sx, sy] = lonLatToXY(pos.lon, pos.lat, W, H);
+  const dist = Math.sqrt((clickX - sx)**2 + (clickY - sy)**2);
+  if (dist < 25 && dist < closestDist) {
+   closestDist = dist;
+   closestIdx = i;
+  }
+ }
+ if (closestIdx >= 0) {
+  if (focusLocked && focusedSatIndex === closestIdx) {
+   focusLocked = false; // unlock if clicking same satellite
+  } else {
+   focusedSatIndex = closestIdx;
+   focusLocked = true;
+  }
+ } else {
+  focusLocked = false; // click on empty space unlocks
+ }
+});
+
+// Listen for Escape key to unlock focus
+document.addEventListener('keydown', function(e) {
+ if (e.key === 'Escape') focusLocked = false;
+});
 
 function lonLatToXY(lon, lat, w, h) {
  const x=(lon+180)/360*w;
  const y=(90-lat)/180*h;
  return [x,y];
 }
+
+// SGP4-powered position calculator with graceful fallback
 function getSatPos(s, t) {
  const ph=satPhases[s.id]||0;
- if (s.orbit==='GEO'||s.orbit==='GSO') return {lon:s.baseLon, lat:s.baseLat};
+
+ // Try real SGP4 propagation first
+ if (sgp4Available && satTLERecords[s.id]) {
+  try {
+   const now = new Date();
+   const posVel = satellite.propagate(satTLERecords[s.id], now);
+   if (posVel.position) {
+    const gmst = satellite.gstime(now);
+    const geo = satellite.eciToGeodetic(posVel.position, gmst);
+    const lon = satellite.degreesLong(geo.longitude);
+    const lat = satellite.degreesLat(geo.latitude);
+    const alt = geo.height; // km
+    return {lon, lat, alt};
+   }
+  } catch (e) { /* fall through to hardcoded */ }
+ }
+
+ // Fallback: hardcoded orbital model
+ if (s.orbit==='GEO'||s.orbit==='GSO') return {lon:s.baseLon, lat:s.baseLat, alt:s.altKm||35786};
  const lon=(s.baseLon+s.lonSpd*t*0.5+ph*30)%360;
  const adjLon=lon>180?lon-360:lon;
  const lat=s.baseLat*Math.cos(t*0.3+ph);
- return {lon:adjLon, lat};
+ return {lon:adjLon, lat, alt:s.altKm||500};
 }
 
 function resizeMap() {
@@ -878,6 +982,15 @@ function drawWorldMap(ts) {
 
  const W = mapCanvas.width, H = mapCanvas.height;
  mapCtx.clearRect(0, 0, W, H);
+
+ // Auto-cycle focus every 8 seconds (unless user locked)
+ if (!focusLocked && (ts - lastFocusCycleTime > FOCUS_CYCLE_INTERVAL)) {
+  focusedSatIndex = (focusedSatIndex + 1) % SATS_DEF.length;
+  lastFocusCycleTime = ts;
+ }
+ const focusedSat = SATS_DEF[focusedSatIndex];
+ const focusedPos = getSatPos(focusedSat, mapTime);
+ const [fsx, fsy] = lonLatToXY(focusedPos.lon, focusedPos.lat, W, H);
 
  // === 1. DEEP-OCEAN BACKGROUND (NASA Blue Marble style) ===
  const oceanGrad = mapCtx.createLinearGradient(0, 0, 0, H);
@@ -993,25 +1106,29 @@ function drawWorldMap(ts) {
  const activeHel1os = window.lastHel1osValue || 10;
  const dbAbsorption = Math.max(0, Math.log10(activeSolexs) * 12 + Math.log10(activeHel1os) * 4 - 20);
  const absorptionRatio = Math.min(1.0, dbAbsorption / 30);
- const [subX, subY] = lonLatToXY(solarLon, solarDecl, W, H);
+ 
+  // Center D-layer blackout zone dynamically on the focused satellite's ground track
+  let projectedLon = focusedPos.lon;
+  let projectedLat = focusedPos.lat;
+  const [projX, projY] = lonLatToXY(projectedLon, projectedLat, W, H);
 
  if (showBlackout && absorptionRatio > 0.05) {
   const span = W * 0.55 * absorptionRatio;
-  const bo = mapCtx.createRadialGradient(subX, subY, 0, subX, subY, span);
+  const bo = mapCtx.createRadialGradient(projX, projY, 0, projX, projY, span);
   const op = 0.55 * absorptionRatio;
   bo.addColorStop(0,    `rgba(255,60,0,${op})`);
   bo.addColorStop(0.3,  `rgba(255,120,0,${op * 0.65})`);
   bo.addColorStop(0.65, `rgba(255,200,0,${op * 0.25})`);
   bo.addColorStop(1,    'rgba(0,0,0,0)');
   mapCtx.beginPath();
-  mapCtx.ellipse(subX, subY, span, H * 0.58 * absorptionRatio, 0, 0, Math.PI * 2);
+  mapCtx.ellipse(projX, projY, span, H * 0.58 * absorptionRatio, 0, 0, Math.PI * 2);
   mapCtx.fillStyle = bo; mapCtx.fill();
 
   // Small inline label (near the effect, not overlapping satellites)
   mapCtx.fillStyle = `rgba(255,100,0,${0.9 * absorptionRatio})`;
   mapCtx.font = `bold ${Math.round(W * 0.013)}px JetBrains Mono, monospace`;
   mapCtx.textAlign = 'center';
-  mapCtx.fillText(`D-LAYER: -${dbAbsorption.toFixed(1)} dB`, subX, subY + H * 0.08);
+  mapCtx.fillText(`D-LAYER: -${dbAbsorption.toFixed(1)} dB`, projX, projY + H * 0.08);
   mapCtx.textAlign = 'left';
  }
 
@@ -1067,18 +1184,22 @@ function drawWorldMap(ts) {
   // Label with dark background pill (prevents overlap clutter)
   const label = s.name;
   const tw = mapCtx.measureText(label).width;
-  const lx = sx + r + 3, ly = sy + fontSize * 0.35;
+  // Prevent label overlap for adjacent satellites on the map
+  const drawLeft = (s.id === 'INSAT3D' || s.id === 'NavIC1' || s.id === 'GPSB' || s.id === 'RISAT2B');
+  const lx = drawLeft ? sx - r - tw - 6 : sx + r + 3;
+  const ly = sy + fontSize * 0.35;
   mapCtx.fillStyle = 'rgba(5,12,25,0.72)';
   mapCtx.fillRect(lx - 1, ly - fontSize + 1, tw + 4, fontSize + 2);
   mapCtx.fillStyle = 'rgba(220,235,255,0.85)';
   mapCtx.fillText(label, lx, ly);
  }
 
- // === 9. ADITYA-L1 BORESIGHT INDICATOR (left strip — no overlap) ===
+ // === 9. ADITYA-L1 BORESIGHT + DYNAMIC SATELLITE FOCUS TRACKER ===
+
  // Aditya-L1 pin anchored to the LEFT edge of the canvas
  const l1x = 14, l1y = H * 0.5;
 
- // Pulsing cyan halo
+ // Pulsing cyan halo for L1 pin
  const pulseR = 6 + 3 * Math.sin(mapTime * 4);
  const l1Halo = mapCtx.createRadialGradient(l1x, l1y, 0, l1x, l1y, pulseR * 2);
  l1Halo.addColorStop(0, 'rgba(6,182,212,0.5)');
@@ -1091,69 +1212,126 @@ function drawWorldMap(ts) {
  mapCtx.strokeStyle = '#67e8f9'; mapCtx.lineWidth = 1.2;
  mapCtx.stroke();
 
- // Vertical label alongside left edge
+ // Label
  mapCtx.save();
  mapCtx.fillStyle = '#67e8f9';
  mapCtx.font = `bold ${Math.round(W * 0.013)}px Inter, sans-serif`;
  mapCtx.translate(l1x + 10, l1y);
- mapCtx.fillText('🛰 Aditya-L1 (L1)', 0, -5);
+ mapCtx.fillText('\u{1F6F0} Aditya-L1 (L1)', 0, -5);
  mapCtx.fillStyle = 'rgba(100,220,255,0.55)';
  mapCtx.font = `${Math.round(W * 0.011)}px JetBrains Mono, monospace`;
- mapCtx.fillText('Boresight → Sun', 0, 8);
+ mapCtx.fillText('Boresight \u2192 Sun', 0, 8);
  mapCtx.restore();
 
- // Animated dashed beam from L1 edge-pin to sub-solar point
+ // --- Animated dashed beam from L1 to FOCUSED SATELLITE ---
  mapCtx.save();
- mapCtx.strokeStyle = 'rgba(234,179,8,0.45)';
- mapCtx.lineWidth = 1.2;
+ const beamColor = focusLocked ? 'rgba(168,85,247,0.6)' : 'rgba(234,179,8,0.45)';
+ mapCtx.strokeStyle = beamColor;
+ mapCtx.lineWidth = 1.5;
  mapCtx.setLineDash([7, 5]);
  mapCtx.lineDashOffset = -mapTime * 18;
  mapCtx.beginPath();
  mapCtx.moveTo(l1x + 5, l1y);
- mapCtx.lineTo(subX, subY);
+ mapCtx.lineTo(fsx, fsy);
  mapCtx.stroke();
  mapCtx.setLineDash([]);
  mapCtx.restore();
 
- // Pulsing target ring at sub-solar point
- const tRad = 9 + 5 * Math.sin(mapTime * 5);
- mapCtx.strokeStyle = `rgba(234,179,8,${0.55 + 0.4 * Math.sin(mapTime * 5)})`;
- mapCtx.lineWidth = 1.5;
- mapCtx.beginPath(); mapCtx.arc(subX, subY, tRad, 0, Math.PI * 2); mapCtx.stroke();
- mapCtx.strokeStyle = 'rgba(255,200,50,0.25)';
- mapCtx.lineWidth = 4;
- mapCtx.beginPath(); mapCtx.arc(subX, subY, tRad + 5, 0, Math.PI * 2); mapCtx.stroke();
+ // --- Animated Tracking Reticle on Focused Satellite ---
+ const trR = 14 + 4 * Math.sin(mapTime * 4.5);
+ const reticleAlpha = 0.6 + 0.35 * Math.sin(mapTime * 5);
+ const reticleColor = focusLocked ? `rgba(168,85,247,${reticleAlpha})` : `rgba(255,255,255,${reticleAlpha})`;
 
- // Cross-hair at sub-solar
- mapCtx.strokeStyle = 'rgba(234,179,8,0.5)';
+ // Outer rotating reticle ring
+ mapCtx.save();
+ mapCtx.translate(fsx, fsy);
+ mapCtx.rotate(mapTime * 0.8);
+ mapCtx.strokeStyle = reticleColor;
+ mapCtx.lineWidth = 1.5;
+ // Draw 4 corner arcs (radar lock style)
+ for (let c = 0; c < 4; c++) {
+  const startA = (c * Math.PI / 2) + 0.15;
+  const endA = startA + 1.1;
+  mapCtx.beginPath();
+  mapCtx.arc(0, 0, trR, startA, endA);
+  mapCtx.stroke();
+ }
+ mapCtx.restore();
+
+ // Inner pulsing ring
+ mapCtx.strokeStyle = focusLocked ? `rgba(168,85,247,${reticleAlpha * 0.5})` : `rgba(255,255,255,${reticleAlpha * 0.4})`;
+ mapCtx.lineWidth = 3;
+ mapCtx.beginPath(); mapCtx.arc(fsx, fsy, trR + 5, 0, Math.PI * 2); mapCtx.stroke();
+
+ // Cross-hair on focused satellite
+ mapCtx.strokeStyle = reticleColor;
  mapCtx.lineWidth = 0.8;
  mapCtx.beginPath();
- mapCtx.moveTo(subX - 14, subY); mapCtx.lineTo(subX + 14, subY);
- mapCtx.moveTo(subX, subY - 14); mapCtx.lineTo(subX, subY + 14);
+ mapCtx.moveTo(fsx - 18, fsy); mapCtx.lineTo(fsx - 8, fsy);
+ mapCtx.moveTo(fsx + 8, fsy); mapCtx.lineTo(fsx + 18, fsy);
+ mapCtx.moveTo(fsx, fsy - 18); mapCtx.lineTo(fsx, fsy - 8);
+ mapCtx.moveTo(fsx, fsy + 8); mapCtx.lineTo(fsx, fsy + 18);
  mapCtx.stroke();
 
- // === 10. STATUS STRIP (bottom of canvas — never overlaps map content) ===
- const stripH = Math.round(H * 0.09);
+ // Focus label above reticle
+ const focusLbl = `TRACKING: ${focusedSat.name}`;
+ mapCtx.font = `bold ${Math.round(W * 0.011)}px JetBrains Mono, monospace`;
+ const flw = mapCtx.measureText(focusLbl).width;
+ mapCtx.fillStyle = 'rgba(4,12,26,0.8)';
+ mapCtx.fillRect(fsx - flw/2 - 4, fsy - trR - 18, flw + 8, 14);
+ mapCtx.fillStyle = focusLocked ? '#c4b5fd' : '#fbbf24';
+ mapCtx.textAlign = 'center';
+ mapCtx.fillText(focusLbl, fsx, fsy - trR - 7);
+ mapCtx.textAlign = 'left';
+
+ // === 10. ENHANCED STATUS STRIP with focused satellite info ===
+ const stripH = Math.round(H * 0.11);
  const stripY = H - stripH;
- mapCtx.fillStyle = 'rgba(4,12,26,0.82)';
+ mapCtx.fillStyle = 'rgba(4,12,26,0.88)';
  mapCtx.fillRect(0, stripY, W, stripH);
  mapCtx.strokeStyle = 'rgba(6,182,212,0.3)';
  mapCtx.lineWidth = 0.8;
  mapCtx.beginPath(); mapCtx.moveTo(0, stripY); mapCtx.lineTo(W, stripY); mapCtx.stroke();
 
- const sf = Math.max(9, Math.round(W * 0.012));
+ const sf = Math.max(9, Math.round(W * 0.011));
+ const stripMid = stripY + stripH * 0.35;
+ const stripBot = stripY + stripH * 0.72;
+
+ // Row 1: Aditya-L1 telemetry info
  mapCtx.font = `bold ${sf}px Inter, sans-serif`;
  mapCtx.fillStyle = '#06b6d4';
- mapCtx.fillText('🛰 ADITYA-L1 TELEMETRY', 10, stripY + stripH * 0.48);
+ mapCtx.fillText('\u{1F6F0} ADITYA-L1 TELEMETRY', 10, stripMid);
  mapCtx.fillStyle = '#22c55e';
- mapCtx.fillText('● LOCK', W * 0.22, stripY + stripH * 0.48);
-
+ mapCtx.fillText('\u25CF LOCK', W * 0.20, stripMid);
  mapCtx.font = `${sf}px JetBrains Mono, monospace`;
- mapCtx.fillStyle = 'rgba(200,220,255,0.75)';
- mapCtx.fillText(`Focus: ${solarDecl.toFixed(1)}°N  ${solarLon.toFixed(1)}°E`, W * 0.3, stripY + stripH * 0.48);
- mapCtx.fillStyle = 'rgba(200,220,255,0.55)';
- mapCtx.fillText(`SoLEXS: ${(window.lastSolexsValue || 0).toFixed(1)} cts/s`, W * 0.58, stripY + stripH * 0.48);
- mapCtx.fillText(`HEL1OS: ${(window.lastHel1osValue || 0).toFixed(1)} cts/s`, W * 0.78, stripY + stripH * 0.48);
+ mapCtx.fillStyle = 'rgba(200,220,255,0.65)';
+ mapCtx.fillText(`SoLEXS: ${(window.lastSolexsValue || 0).toFixed(1)} cts/s`, W * 0.28, stripMid);
+ mapCtx.fillText(`HEL1OS: ${(window.lastHel1osValue || 0).toFixed(1)} cts/s`, W * 0.46, stripMid);
+
+ // Row 1 continued: data source badge
+ mapCtx.fillStyle = 'rgba(148,163,184,0.45)';
+ mapCtx.fillText('Orbits: CelesTrak (SGP4)', W * 0.66, stripMid);
+ mapCtx.fillStyle = sgp4Available && Object.keys(satTLERecords).length > 0 ? '#22c55e' : '#f97316';
+ mapCtx.fillText(sgp4Available && Object.keys(satTLERecords).length > 0 ? '\u25CF REAL TLE' : '\u25CF SIMULATED', W * 0.86, stripMid);
+
+ // Row 2: Focused satellite dynamic info
+ const focusAlt = focusedPos.alt ? focusedPos.alt.toFixed(0) : (focusedSat.altKm || '?');
+ const riskLabels = {crewed:'CRITICAL',nav:'HIGH',weather:'MODERATE',earth:'MODERATE',radar:'MODERATE'};
+ const focusRisk = (lastAlertClass === 'high') ? (riskLabels[focusedSat.type] || 'MODERATE') : (lastAlertClass === 'med') ? 'LOW' : 'SAFE';
+ const riskColor = focusRisk === 'CRITICAL' || focusRisk === 'HIGH' ? '#ef4444' : focusRisk === 'MODERATE' ? '#f59e0b' : '#22c55e';
+
+ mapCtx.font = `bold ${sf}px JetBrains Mono, monospace`;
+ mapCtx.fillStyle = focusLocked ? '#c4b5fd' : '#fbbf24';
+ mapCtx.fillText(`\u25B6 ${focusedSat.name}`, 10, stripBot);
+ mapCtx.font = `${sf}px JetBrains Mono, monospace`;
+ mapCtx.fillStyle = 'rgba(200,220,255,0.6)';
+ mapCtx.fillText(`${focusedSat.orbit} | Alt: ${focusAlt} km | ${focusedPos.lon.toFixed(1)}\u00B0E ${focusedPos.lat.toFixed(1)}\u00B0N`, W * 0.14, stripBot);
+ mapCtx.fillStyle = riskColor;
+ mapCtx.font = `bold ${sf}px JetBrains Mono, monospace`;
+ mapCtx.fillText(`Risk: ${focusRisk}`, W * 0.52, stripBot);
+ mapCtx.fillStyle = 'rgba(148,163,184,0.4)';
+ mapCtx.font = `${sf}px JetBrains Mono, monospace`;
+ mapCtx.fillText(focusLocked ? '\u{1F512} LOCKED (click to unlock)' : '\u{1F504} Auto-cycling (click satellite to lock)', W * 0.66, stripBot);
 }
 requestAnimationFrame(drawWorldMap);
 
@@ -1788,6 +1966,22 @@ function tick() {
  // Store globally for canvas access
  window.lastSolexsValue = dp.solexs;
  window.lastHel1osValue = dp.hel1os;
+ window.flareLongitude = typeof dp.flareLon === 'number' ? dp.flareLon : (30 + 15 * Math.sin(idx * 0.1));
+ 
+ if (typeof dp.flareLat === 'number') {
+  window.flareLatitude = dp.flareLat;
+ } else if (dp.topRegionLat) {
+  const match = String(dp.topRegionLat).match(/([NS])(\d+)/);
+  if (match) {
+   const hem = match[1];
+   const val = parseFloat(match[2]);
+   window.flareLatitude = hem === 'N' ? val : -val;
+  } else {
+   window.flareLatitude = 10 + 8 * Math.cos(idx * 0.15);
+  }
+ } else {
+  window.flareLatitude = 10 + 8 * Math.cos(idx * 0.15);
+ }
 
  telChart.data.datasets[0].data.shift(); telChart.data.datasets[0].data.push(dp.solexs);
  telChart.data.datasets[1].data.shift(); telChart.data.datasets[1].data.push(dp.hel1os);
@@ -3301,6 +3495,20 @@ if (typeof tick === 'function') {
 
     // Flare longitude (CRITICAL for SEP engine connectivity)
     window.flareLongitude = safe(dp.flareLon, 0);
+
+    // Parse flare latitude (for map boresight target centering)
+    let latVal = 0;
+    if (dp.topRegionLat) {
+      const match = String(dp.topRegionLat).match(/([NS])(\d+)/);
+      if (match) {
+        const hem = match[1];
+        const val = parseFloat(match[2]);
+        latVal = hem === 'N' ? val : -val;
+      }
+    } else if (typeof dp.flareLat === 'number') {
+      latVal = dp.flareLat;
+    }
+    window.flareLatitude = latVal;
 
     // GOES X-ray (raw physical values, for display)
     window.goesXrayA = dp.goesXrayA;
